@@ -1,0 +1,8 @@
+{
+    "name": "ThermoConsole Boot",
+    "author": "ThermoConsole",
+    "version": "1.0.0",
+    "description": "Boot splash screen",
+    "entry": "main.lua",
+    "system": true
+}

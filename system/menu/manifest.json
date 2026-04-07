@@ -1,0 +1,13 @@
+{
+    "name": "ThermoConsole System Menu",
+    "author": "ThermoConsole",
+    "version": "1.0.0",
+    "description": "Main system menu for game selection, settings, and more",
+    "entry": "main.lua",
+    "system": true,
+    "features": {
+        "game_launcher": true,
+        "settings": true,
+        "usb_mode": true
+    }
+}

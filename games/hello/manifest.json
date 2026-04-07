@@ -1,0 +1,16 @@
+{
+  "name": "Hello ThermoConsole",
+  "author": "Carson",
+  "version": "1.0.0",
+  "description": "A simple demo showing the ThermoConsole API",
+  "entry": "main.lua",
+  "display": {
+    "width": 480,
+    "height": 640,
+    "orientation": "portrait"
+  },
+  "sprites": {
+    "file": "sprites.png",
+    "grid_size": 16
+  }
+}

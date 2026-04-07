@@ -1,0 +1,13 @@
+[Unit]
+Description=ThermoConsole USB Gadget Mode Service
+After=local-fs.target
+Before=thermoconsole.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/thermoconsole/scripts/usb-gadget.sh setup
+ExecStop=/opt/thermoconsole/scripts/usb-gadget.sh disable
+
+[Install]
+WantedBy=multi-user.target

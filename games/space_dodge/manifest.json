@@ -1,0 +1,16 @@
+{
+  "name": "Space Dodge",
+  "author": "Carson",
+  "version": "1.0.0",
+  "description": "Dodge asteroids in space! A complete example game demonstrating game states, spawning, collision, scoring, and save/load.",
+  "entry": "main.lua",
+  "display": {
+    "width": 480,
+    "height": 640,
+    "orientation": "portrait"
+  },
+  "sprites": {
+    "file": "sprites.png",
+    "grid_size": 16
+  }
+}

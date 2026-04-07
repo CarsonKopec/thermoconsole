@@ -1,0 +1,16 @@
+{
+  "name": "Demo Platformer",
+  "author": "Carson",
+  "version": "0.1.0",
+  "description": "A ThermoConsole game created from platformer template",
+  "entry": "main.lua",
+  "display": {
+    "width": 480,
+    "height": 640,
+    "orientation": "portrait"
+  },
+  "sprites": {
+    "file": "sprites.png",
+    "grid_size": 16
+  }
+}
