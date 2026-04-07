@@ -170,7 +170,7 @@ void platform_input_update(void) {
 
 int platform_gfx_init(void) {
     /* Force KMS/DRM driver for best performance on Pi */
-    SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "kmsdrm");
+    SDL_SetHint(SDL_HINT_VIDEODRIVER, "kmsdrm");
     
     /* Use nearest-neighbor scaling */
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
@@ -284,7 +284,7 @@ bool platform_pico_connected(void) {
 bool platform_is_throttled(void) {
     FILE* f = fopen("/sys/devices/platform/soc/soc:firmware/get_throttled", "r");
     if (f) {
-        int throttled;
+        unsigned int throttled;
         if (fscanf(f, "%x", &throttled) == 1) {
             fclose(f);
             return (throttled & 0x0F) != 0;

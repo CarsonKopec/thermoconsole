@@ -8,6 +8,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <time.h>
 
 #ifdef _WIN32
 #include <direct.h>
