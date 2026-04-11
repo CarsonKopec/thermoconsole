@@ -251,8 +251,8 @@ void thermo_run(void) {
             char fps_text[16];
             snprintf(fps_text, sizeof(fps_text), "FPS:%d", g_thermo->state.current_fps);
             /* Draw in top-right corner with black background */
-            gfx_rectfill(THERMO_WIDTH - 50, 0, 50, 10, 0);  /* Black bg */
-            gfx_print(fps_text, THERMO_WIDTH - 48, 1, 11);   /* Green text */
+            gfx_rectfill(THERMO_SCREEN_WIDTH - 50, 0, 50, 10, 0);  /* Black bg */
+            gfx_print(fps_text, THERMO_SCREEN_WIDTH - 48, 1, 11);   /* Green text */
         }
         
         gfx_end_frame();

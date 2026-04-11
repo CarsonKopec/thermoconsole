@@ -22,7 +22,7 @@ set -e
 
 TC_VERSION="1.0.0"
 TC_REPO="https://github.com/CarsonKopec/thermoconsole"
-TC_DOWNLOAD="https://github.com/CarsonKopec/thermoconsole/releases/download/v${TC_VERSION}/thermoconsole-v${TC_VERSION}.tar.gz"
+TC_DOWNLOAD="https://github.com/CarsonKopec/thermoconsole/archive/refs/tags/thermoconsole-${TC_VERSION}.tar.gz"
 TC_ZIP_URL="https://github.com/CarsonKopec/thermoconsole/archive/refs/heads/main.zip"
 
 INSTALL_DIR="/opt/thermoconsole"
@@ -54,15 +54,6 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 BOLD='\033[1m'
 NC='\033[0m'
-
-# Detect Bookworm (uses /boot/firmware/) vs older (uses /boot/)
-BOOT_CONFIG="/boot/config.txt"
-BOOT_CMDLINE="/boot/cmdline.txt"
-
-if [ -d "/boot/firmware" ] && [ -f "/boot/firmware/config.txt" ]; then
-    BOOT_CONFIG="/boot/firmware/config.txt"
-    BOOT_CMDLINE="/boot/firmware/cmdline.txt"
-fi
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Functions
@@ -123,14 +114,6 @@ check_pi() {
     local model
     model=$(tr -d '\0' < /proc/device-tree/model)
     log "Detected: $model"
-    log "Boot config: $BOOT_CONFIG"
-    
-    # Check OS version
-    if [ -f /etc/os-release ]; then
-        local version
-        version=$(grep "VERSION_CODENAME" /etc/os-release | cut -d= -f2)
-        log "OS Version: $version"
-    fi
     
     if [[ ! "$model" =~ "Zero" ]]; then
         warn "ThermoConsole is optimized for Pi Zero. Other models may work but are untested."
@@ -247,83 +230,79 @@ setup_directories() {
 
 configure_display() {
     log "Configuring display (Waveshare 2.8\" DPI LCD)..."
-    log "Using config file: $BOOT_CONFIG"
     
-    if [ ! -f "$BOOT_CONFIG" ]; then
-        warn "config.txt not found at $BOOT_CONFIG, skipping display configuration"
+    local config="/boot/config.txt"
+    
+    # Handle different boot locations (Bookworm uses /boot/firmware/)
+    if [ ! -f "$config" ] && [ -f "/boot/firmware/config.txt" ]; then
+        config="/boot/firmware/config.txt"
+    fi
+    
+    if [ ! -f "$config" ]; then
+        warn "config.txt not found, skipping display configuration"
         return
     fi
     
     # Backup original
-    if [ ! -f "${BOOT_CONFIG}.backup" ]; then
-        cp "$BOOT_CONFIG" "${BOOT_CONFIG}.backup"
+    if [ ! -f "${config}.backup" ]; then
+        cp "$config" "${config}.backup"
     fi
     
     # Check if already configured
-    if grep -q "ThermoConsole" "$BOOT_CONFIG"; then
+    if grep -q "ThermoConsole" "$config"; then
         warn "Display already configured, skipping"
         return
     fi
     
-    # Comment out conflicting vc4 settings FIRST
-    sed -i 's/^dtoverlay=vc4-kms-v3d/#dtoverlay=vc4-kms-v3d  # Disabled for ThermoConsole/' "$BOOT_CONFIG"
-    sed -i 's/^dtoverlay=vc4-fkms-v3d/#dtoverlay=vc4-fkms-v3d  # Disabled for ThermoConsole/' "$BOOT_CONFIG"
-    
     # Add ThermoConsole config
-    cat >> "$BOOT_CONFIG" << 'EOF'
+    cat >> "$config" << 'EOF'
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ThermoConsole Display Configuration
-# Waveshare 2.8" DPI LCD (480x640 native -> 640x480 landscape)
+# Waveshare 2.8" DPI LCD
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# DPI LCD pins
+# KMS driver
+dtoverlay=vc4-kms-v3d
+
+# DPI display
+dtoverlay=vc4-kms-dpi-2inch8
+
+# DPI GPIO pins
 gpio=0-9=a2
 gpio=12-17=a2
 gpio=20-25=a2
-dtoverlay=dpi24
-enable_dpi_lcd=1
-display_default_lcd=1
-
-# Display timing
-dpi_group=2
-dpi_mode=87
-dpi_output_format=0x7F216
-hdmi_timings=480 0 26 16 10 640 0 25 10 15 0 0 0 60 0 32000000 1
-
-# I2C for controller (400kHz fast mode)
-dtparam=i2c_arm=on
-dtparam=i2c_arm_baudrate=400000
-
-# Audio via PWM
-dtoverlay=pwm-2chan,pin=18,func=2,pin2=19,func2=2
 
 # GPU memory
 gpu_mem=128
 
-# Boot optimization
-disable_splash=1
-boot_delay=0
-
-# USB Gadget Mode
-dtoverlay=dwc2
 EOF
 
-    success "Display configured in $BOOT_CONFIG"
+    # Comment out conflicting settings
+    sed -i 's/^dtoverlay=vc4-kms-v3d/#dtoverlay=vc4-kms-v3d  # Disabled for ThermoConsole/' "$config"
+    sed -i 's/^dtoverlay=vc4-fkms-v3d/#dtoverlay=vc4-fkms-v3d  # Disabled for ThermoConsole/' "$config"
+    
+    success "Display configured"
 }
 
 configure_boot() {
     log "Configuring boot options..."
-    log "Using cmdline file: $BOOT_CMDLINE"
     
-    if [ ! -f "$BOOT_CMDLINE" ]; then
-        warn "cmdline.txt not found at $BOOT_CMDLINE, skipping boot configuration"
+    local cmdline="/boot/cmdline.txt"
+    
+    # Handle different boot locations
+    if [ ! -f "$cmdline" ] && [ -f "/boot/firmware/cmdline.txt" ]; then
+        cmdline="/boot/firmware/cmdline.txt"
+    fi
+    
+    if [ ! -f "$cmdline" ]; then
+        warn "cmdline.txt not found, skipping boot configuration"
         return
     fi
     
     # Add quiet boot options if not present
-    if ! grep -q "quiet" "$BOOT_CMDLINE"; then
-        sed -i 's/$/ quiet loglevel=3 vt.global_cursor_default=0 logo.nologo/' "$BOOT_CMDLINE"
+    if ! grep -q "quiet" "$cmdline"; then
+        sed -i 's/$/ quiet loglevel=3 vt.global_cursor_default=0 logo.nologo/' "$cmdline"
     fi
     
     success "Boot options configured"
@@ -368,8 +347,21 @@ EOF
 setup_usb_gadget() {
     log "Setting up USB gadget mode..."
     
-    # USB gadget config is now added in configure_display()
-    # Just need to add modules
+    local config="/boot/config.txt"
+    
+    # Handle different boot locations
+    if [ ! -f "$config" ] && [ -f "/boot/firmware/config.txt" ]; then
+        config="/boot/firmware/config.txt"
+    fi
+    
+    if [ -f "$config" ]; then
+        # Enable dwc2 overlay for USB gadget support
+        if ! grep -q "dtoverlay=dwc2" "$config"; then
+            echo "" >> "$config"
+            echo "# USB Gadget Mode (allows PC file transfer)" >> "$config"
+            echo "dtoverlay=dwc2" >> "$config"
+        fi
+    fi
     
     # Add dwc2 and libcomposite to modules
     if ! grep -q "dwc2" /etc/modules 2>/dev/null; then
