@@ -50,7 +50,7 @@ Or use **Raspberry Pi Imager** / **balenaEtcher** with the `.img.xz` file.
 Flash Raspberry Pi OS Lite first, then:
 
 ```bash
-curl -sSL https://gist.githubusercontent.com/CarsonKopec/f57599989469af71cae880883bf3e511/raw/995e31c29bd6bc1a828eedddf0e493bb37bf8b8e/thermoconsole_install.sh | sudo bash
+curl -sSL https://thermoconsole.io/install.sh | sudo bash
 ```
 
 ### Option 3: Build Your Own Image

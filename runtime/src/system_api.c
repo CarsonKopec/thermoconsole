@@ -296,7 +296,7 @@ static int l_apply_setting(lua_State* L) {
         snprintf(cmd, sizeof(cmd), "amixer set Master %d%% 2>/dev/null", vol);
         system(cmd);
     } else if (strcmp(key, "show_fps") == 0) {
-        /* Toggle FPS display */
+        /* Toggle FPS display - g_show_fps is defined in main.c */
         extern int g_show_fps;
         g_show_fps = (strcmp(value_str, "true") == 0);
     }

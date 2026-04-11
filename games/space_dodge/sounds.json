@@ -1,0 +1,76 @@
+{
+    "version": 1,
+    "sounds": {
+        "jump": {
+            "type": "sweep",
+            "start": 400,
+            "end": 800,
+            "duration": 100
+        },
+        "coin": {
+            "type": "notes",
+            "data": [[988, 80], [1319, 200]]
+        },
+        "hit": {
+            "type": "sweep",
+            "start": 600,
+            "end": 200,
+            "duration": 80
+        },
+        "powerup": {
+            "type": "arpeggio",
+            "notes": [523, 659, 784, 1047],
+            "speed": 80
+        },
+        "death": {
+            "type": "notes",
+            "data": [[494, 150], [440, 150], [392, 150], [349, 300]]
+        },
+        "select": {
+            "type": "notes", 
+            "data": [[1200, 50]]
+        },
+        "start": {
+            "type": "arpeggio",
+            "notes": [523, 659, 784, 1047],
+            "speed": 100
+        },
+        "explosion": {
+            "type": "noise",
+            "duration": 200
+        },
+        "laser": {
+            "type": "sweep",
+            "start": 1500,
+            "end": 300,
+            "duration": 80
+        },
+        "pickup": {
+            "type": "notes",
+            "data": [[880, 50], [1100, 50], [1320, 100]]
+        },
+        "menu_move": {
+            "type": "notes",
+            "data": [[800, 30]]
+        },
+        "menu_select": {
+            "type": "notes",
+            "data": [[600, 50], [900, 100]]
+        },
+        "game_over": {
+            "type": "melody",
+            "bpm": 100,
+            "data": "B4:4,A4:4,G4:4,F4:2,R:4,F4:4,E4:2"
+        },
+        "victory": {
+            "type": "melody",
+            "bpm": 150,
+            "data": "C5:8,E5:8,G5:8,C6:4,G5:8,C6:2"
+        },
+        "level_start": {
+            "type": "arpeggio",
+            "notes": [262, 330, 392, 523, 659, 784],
+            "speed": 60
+        }
+    }
+}

@@ -9,6 +9,8 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 # ─────────────────────────────────────────────────────────────────────────────
 
 option(THERMO_BUILD_PI "Build for Raspberry Pi" OFF)
+option(THERMO_PICO_AUDIO "Use Pico as sound chip via I2C" OFF)
+option(THERMO_PICO_USB "Use Pico for sound+buttons via USB serial" OFF)
 option(THERMO_DEBUG "Enable debug output" OFF)
 
 if(THERMO_DEBUG)
@@ -42,12 +44,25 @@ set(THERMO_SOURCES
     src/main.c
     src/graphics.c
     src/input.c
-    src/audio.c
     src/rom.c
     src/lua_api.c
     src/script.c
     src/system_api.c
 )
+
+# Audio source selection
+if(THERMO_PICO_USB)
+    message(STATUS "Using Pico via USB serial (sound + buttons)")
+    list(APPEND THERMO_SOURCES src/pico_usb.c)
+    add_definitions(-DTHERMO_PICO_USB)
+elseif(THERMO_PICO_AUDIO)
+    message(STATUS "Using Pico sound chip (I2C)")
+    list(APPEND THERMO_SOURCES src/audio_pico.c)
+    add_definitions(-DTHERMO_PICO_AUDIO)
+else()
+    message(STATUS "Using SDL_mixer audio")
+    list(APPEND THERMO_SOURCES src/audio.c)
+endif()
 
 # Platform-specific sources
 set(THERMO_PLATFORM_PC_SOURCES
