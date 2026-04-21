@@ -1,0 +1,10 @@
+^C:\USERS\KOPEC\DEVELOPMENT\THERMOCONSOLE\RUNTIME\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/kopec/Development/thermoconsole/runtime -BC:/Users/kopec/Development/thermoconsole/runtime/build --check-stamp-file C:/Users/kopec/Development/thermoconsole/runtime/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

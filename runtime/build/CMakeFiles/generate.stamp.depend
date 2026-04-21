@@ -1,0 +1,62 @@
+# CMake generation dependency list for this directory.
+C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeCInformation.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeCommonLanguageInclude.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDependentOption.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeFindDependencyMacro.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeGenericSystem.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeInitializeConfigs.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeLanguageInformation.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeRCInformation.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeSystemSpecificInformation.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeSystemSpecificInitialize.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/Compiler/CMakeCommonCompilerMacros.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/Compiler/MSVC-C.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/Compiler/MSVC.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/FeatureSummary.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/FindPNG.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/FindPackageHandleStandardArgs.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/FindPackageMessage.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/FindZLIB.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/Internal/CMakeCLinkerInformation.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/Internal/CMakeCommonLinkerInformation.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/Linker/MSVC-C.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/Linker/MSVC.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Linker/Windows-MSVC-C.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Linker/Windows-MSVC.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Windows-Initialize.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Windows-MSVC-C.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Windows-MSVC.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Windows.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/WindowsPaths.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/SelectLibraryConfigurations.cmake
+C:/Users/kopec/Development/thermoconsole/runtime/CMakeLists.txt
+C:/Users/kopec/Development/thermoconsole/runtime/build/CMakeFiles/4.3.1/CMakeCCompiler.cmake
+C:/Users/kopec/Development/thermoconsole/runtime/build/CMakeFiles/4.3.1/CMakeRCCompiler.cmake
+C:/Users/kopec/Development/thermoconsole/runtime/build/CMakeFiles/4.3.1/CMakeSystem.cmake
+C:/vcpkg/installed/x64-windows/share/SDL2_image/SDL2_image-shared-targets-debug.cmake
+C:/vcpkg/installed/x64-windows/share/SDL2_image/SDL2_image-shared-targets-release.cmake
+C:/vcpkg/installed/x64-windows/share/SDL2_image/SDL2_image-shared-targets.cmake
+C:/vcpkg/installed/x64-windows/share/SDL2_image/SDL2_imageConfig.cmake
+C:/vcpkg/installed/x64-windows/share/SDL2_image/SDL2_imageConfigVersion.cmake
+C:/vcpkg/installed/x64-windows/share/SDL2_mixer/SDL2_mixer-shared-targets-debug.cmake
+C:/vcpkg/installed/x64-windows/share/SDL2_mixer/SDL2_mixer-shared-targets-release.cmake
+C:/vcpkg/installed/x64-windows/share/SDL2_mixer/SDL2_mixer-shared-targets.cmake
+C:/vcpkg/installed/x64-windows/share/SDL2_mixer/SDL2_mixerConfig.cmake
+C:/vcpkg/installed/x64-windows/share/SDL2_mixer/SDL2_mixerConfigVersion.cmake
+C:/vcpkg/installed/x64-windows/share/lua/vcpkg-cmake-wrapper.cmake
+C:/vcpkg/installed/x64-windows/share/png/vcpkg-cmake-wrapper.cmake
+C:/vcpkg/installed/x64-windows/share/sdl2/SDL2Config.cmake
+C:/vcpkg/installed/x64-windows/share/sdl2/SDL2ConfigVersion.cmake
+C:/vcpkg/installed/x64-windows/share/sdl2/SDL2Targets-debug.cmake
+C:/vcpkg/installed/x64-windows/share/sdl2/SDL2Targets-release.cmake
+C:/vcpkg/installed/x64-windows/share/sdl2/SDL2Targets.cmake
+C:/vcpkg/installed/x64-windows/share/sdl2/SDL2mainTargets-debug.cmake
+C:/vcpkg/installed/x64-windows/share/sdl2/SDL2mainTargets-release.cmake
+C:/vcpkg/installed/x64-windows/share/sdl2/SDL2mainTargets.cmake
+C:/vcpkg/installed/x64-windows/share/sdl2/sdlfind.cmake
+C:/vcpkg/installed/x64-windows/share/unofficial-lua/unofficial-lua-config-debug.cmake
+C:/vcpkg/installed/x64-windows/share/unofficial-lua/unofficial-lua-config-release.cmake
+C:/vcpkg/installed/x64-windows/share/unofficial-lua/unofficial-lua-config-version.cmake
+C:/vcpkg/installed/x64-windows/share/unofficial-lua/unofficial-lua-config.cmake
+C:/vcpkg/installed/x64-windows/share/zlib/vcpkg-cmake-wrapper.cmake
+C:/vcpkg/scripts/buildsystems/vcpkg.cmake
