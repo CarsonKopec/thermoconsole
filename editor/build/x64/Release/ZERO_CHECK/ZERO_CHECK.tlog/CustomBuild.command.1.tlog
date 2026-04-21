@@ -1,0 +1,10 @@
+^C:\USERS\KOPEC\DEVELOPMENT\THERMOCONSOLE\EDITOR\BUILD\CMAKEFILES\0A3D43365C70754F123A3E524882C9A9\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/kopec/Development/thermoconsole/editor -BC:/Users/kopec/Development/thermoconsole/editor/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Users/kopec/Development/thermoconsole/editor/build/thermoconsole_editor.slnx
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
