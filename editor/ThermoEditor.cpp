@@ -11,6 +11,8 @@
 #include "panels/ManifestEditor.h"
 #include "panels/SpriteEditor.h"
 
+#include <imgui_internal.h>   // DockBuilder* — docking branch only
+
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -184,6 +186,13 @@ bool ThermoEditor::init() {
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    // Nice-to-have docking behaviour:
+    //   - tabs next to a docked window's title keep the window visible
+    //   - auto-hide the tab bar when only one window is docked in a node
+    io.ConfigDockingWithShift            = false;
+    io.ConfigDockingAlwaysTabBar         = false;
+    io.ConfigDockingTransparentPayload   = true;
     io.IniFilename = "imgui.ini";
 
     setupImGuiStyle();
@@ -204,15 +213,6 @@ bool ThermoEditor::init() {
     return true;
 }
 
-void ThermoEditor::applyInitRect(int panelIndex) const {
-    if (panelIndex < 0 || panelIndex >= 6) return;
-    const float* r = m_initRects[panelIndex];
-    if (r[2] > 0.f) {
-        ImGui::SetNextWindowPos ({r[0], r[1]}, ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowSize({r[2], r[3]}, ImGuiCond_FirstUseEver);
-    }
-}
-
 void ThermoEditor::run() {
     while (m_running) {
         SDL_Event event;
@@ -231,33 +231,47 @@ void ThermoEditor::run() {
 
         handleShortcuts();
 
-        // ── Full-window menu bar host ───────────────────────────────────────
+        // ── Full-window DockSpace host ──────────────────────────────────────
+        // The host window fills the main viewport, hosts the menu bar, and
+        // carries a DockSpace that every panel docks into. Users can:
+        //   - drag a panel's tab to snap it next to another (split docking)
+        //   - drag a panel out of the tab bar to tear it off into a floating
+        //     window they can move freely ("pop out")
+        //   - tab multiple panels together by dropping one on another
+        //   - double-click a floating window's title to re-dock it
         ImGuiViewport* vp = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(vp->WorkPos);
+        ImGui::SetNextWindowPos (vp->WorkPos);
         ImGui::SetNextWindowSize(vp->WorkSize);
+        ImGui::SetNextWindowViewport(vp->ID);
 
-        ImGuiWindowFlags host_flags =
+        const ImGuiWindowFlags host_flags =
             ImGuiWindowFlags_NoTitleBar            |
             ImGuiWindowFlags_NoCollapse            |
             ImGuiWindowFlags_NoResize              |
             ImGuiWindowFlags_NoMove                |
+            ImGuiWindowFlags_NoDocking             |
             ImGuiWindowFlags_NoBringToFrontOnFocus |
             ImGuiWindowFlags_NoNavFocus            |
-            ImGuiWindowFlags_NoBackground          |
             ImGuiWindowFlags_MenuBar;
 
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,   0.f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0.f, 0.f});
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,    {0.f, 0.f});
         ImGui::Begin("##DockHost", nullptr, host_flags);
         ImGui::PopStyleVar(3);
 
         drawMenuBar();
 
-        if (!m_layoutApplied) {
-            positionPanels();
-            m_layoutApplied = true;
+        m_dockspaceId = ImGui::GetID("MainDockspace");
+        // Build the default layout *before* submitting the DockSpace so the
+        // dockspace's first render already reflects it. Otherwise panels
+        // would flicker through a one-frame "unrooted" state.
+        if (m_buildDefaultLayout) {
+            buildDefaultDockLayout(m_dockspaceId);
+            m_buildDefaultLayout = false;
         }
+        ImGui::DockSpace(m_dockspaceId, {0.f, 0.f},
+                         ImGuiDockNodeFlags_PassthruCentralNode);
 
         // Open-project modal is owned by the host window so the popup has a
         // consistent parent regardless of which path requested it.
@@ -338,8 +352,7 @@ bool ThermoEditor::openProject(const fs::path& path) {
         m_manifest = std::move(loaded);
     }
 
-    m_projectPath  = path;
-    m_layoutApplied = false;
+    m_projectPath = path;
 
     // Notify panels
     m_fileBrowser->onProjectOpened(path);
@@ -407,6 +420,10 @@ void ThermoEditor::drawMenuBar() {
         if (m_console)        m_console->drawMenuItem();
         if (m_manifestEditor) m_manifestEditor->drawMenuItem();
         ImGui::Separator();
+        if (ImGui::MenuItem("Reset Layout")) {
+            m_buildDefaultLayout = true;
+            log("Dock layout reset to default.");
+        }
         ImGui::MenuItem("ImGui Demo", nullptr, &m_showImGuiDemo);
         ImGui::EndMenu();
     }
@@ -495,8 +512,9 @@ void ThermoEditor::drawWelcomeScreen() {
     ImGui::SetNextWindowSize(vp->WorkSize);
 
     ImGui::Begin("##Welcome", nullptr,
-        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove |
-        ImGuiWindowFlags_NoResize   | ImGuiWindowFlags_NoBringToFrontOnFocus);
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove     |
+        ImGuiWindowFlags_NoResize   | ImGuiWindowFlags_NoDocking  |
+        ImGuiWindowFlags_NoBringToFrontOnFocus);
 
     const ImVec2 center = { vp->WorkSize.x * 0.5f, vp->WorkSize.y * 0.45f };
 
@@ -548,7 +566,7 @@ void ThermoEditor::drawAboutModal() {
     if (ImGui::BeginPopupModal("About ThermoConsole Editor",
                                &m_showAbout, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        ImGui::Text("ThermoConsole Editor  v1.0.1");
+        ImGui::Text("ThermoConsole Editor  v1.1.0");
         ImGui::Separator();
         ImGui::TextWrapped("A game development tool for the ThermoConsole handheld.");
         ImGui::Spacing();
@@ -600,37 +618,44 @@ void ThermoEditor::handleShortcuts() {
     if (ImGui::IsKeyPressed(ImGuiKey_F6, false) && m_gamePreview) m_gamePreview->stopGame();
 }
 
-// ─── Initial panel layout ───────────────────────────────────────────────────
+// ─── Default dock layout ────────────────────────────────────────────────────
+//
+// Called on the first frame (or after "Reset Layout") to arrange the panels
+// in an IDE-style layout:
+//
+//   +--------+-----------------------+----------------+
+//   |        |                       |                |
+//   | Files  |     Code Editor       | Game Preview   |
+//   |        |                       | / Manifest     |
+//   |        |                       | (tabbed)       |
+//   |        +-----------------------+----------------+
+//   |        |        Console        | Sprite Editor  |
+//   +--------+-----------------------+----------------+
+//
+// After this first pass ImGui persists the user's layout to imgui.ini, so
+// their customizations (splits, pop-outs, tab groupings) stick across runs.
 
-void ThermoEditor::positionPanels() {
-    ImGuiViewport* vp = ImGui::GetMainViewport();
-    const float W  = vp->WorkSize.x;
-    const float H  = vp->WorkSize.y;
-    const float mh = 20.f;
+void ThermoEditor::buildDefaultDockLayout(ImGuiID dockspaceId) {
+    ImGui::DockBuilderRemoveNode(dockspaceId);
+    ImGui::DockBuilderAddNode(dockspaceId,
+        ImGuiDockNodeFlags_DockSpace | ImGuiDockNodeFlags_PassthruCentralNode);
+    ImGui::DockBuilderSetNodeSize(dockspaceId,
+        ImGui::GetMainViewport()->WorkSize);
 
-    const float left_w    = W * 0.16f;
-    const float right_w   = W * 0.26f;
-    const float center_w  = W - left_w - right_w;
-    const float bottom_h  = H * 0.20f;
-    const float code_h    = H - mh - bottom_h;
-    const float preview_h = (H - mh) * 0.50f;
-    const float sprite_h  = (H - mh) - preview_h;
+    ImGuiID dock_main  = dockspaceId;
+    ImGuiID dock_left  = ImGui::DockBuilderSplitNode(dock_main,  ImGuiDir_Left,  0.17f, nullptr, &dock_main);
+    ImGuiID dock_right = ImGui::DockBuilderSplitNode(dock_main,  ImGuiDir_Right, 0.28f, nullptr, &dock_main);
+    ImGuiID dock_btm   = ImGui::DockBuilderSplitNode(dock_main,  ImGuiDir_Down,  0.25f, nullptr, &dock_main);
+    ImGuiID dock_rbtm  = ImGui::DockBuilderSplitNode(dock_right, ImGuiDir_Down,  0.50f, nullptr, &dock_right);
 
-    const float lx = vp->WorkPos.x;
-    const float cx = lx + left_w;
-    const float rx = cx + center_w;
-    const float ty = vp->WorkPos.y + mh;
+    ImGui::DockBuilderDockWindow("Files",         dock_left);
+    ImGui::DockBuilderDockWindow("Code Editor",   dock_main);
+    ImGui::DockBuilderDockWindow("Console",       dock_btm);
+    ImGui::DockBuilderDockWindow("Game Preview",  dock_right);
+    ImGui::DockBuilderDockWindow("Manifest",      dock_right);   // tabbed with Game Preview
+    ImGui::DockBuilderDockWindow("Sprite Editor", dock_rbtm);
 
-    auto setRect = [this](int i, float x, float y, float w, float h) {
-        m_initRects[i][0] = x; m_initRects[i][1] = y;
-        m_initRects[i][2] = w; m_initRects[i][3] = h;
-    };
-    setRect(0, lx, ty,             left_w,   H - mh);      // Files
-    setRect(1, cx, ty,             center_w, code_h);      // Code Editor
-    setRect(2, cx, ty + code_h,    center_w, bottom_h);    // Console
-    setRect(3, rx, ty,             right_w,  preview_h);   // Game Preview
-    setRect(4, rx, ty + preview_h, right_w,  sprite_h);    // Sprite Editor
-    setRect(5, rx, ty,             right_w,  preview_h);   // Manifest (shares slot with Preview)
+    ImGui::DockBuilderFinish(dockspaceId);
 }
 
 // ─── ImGui style ────────────────────────────────────────────────────────────
@@ -678,4 +703,10 @@ void ThermoEditor::setupImGuiStyle() {
     c[ImGuiCol_ResizeGrip]         = {0.20f, 0.35f, 0.65f, 0.5f};
     c[ImGuiCol_ResizeGripHovered]  = {0.28f, 0.45f, 0.80f, 0.8f};
     c[ImGuiCol_ResizeGripActive]   = {0.35f, 0.55f, 0.90f, 1.0f};
+
+    // Docking-branch colors — the drop-zone preview shown while dragging a
+    // panel, and the empty region of the dockspace. These enumerators only
+    // exist on the docking branch (which setup.sh pins).
+    c[ImGuiCol_DockingPreview]     = {0.35f, 0.55f, 0.90f, 0.7f};
+    c[ImGuiCol_DockingEmptyBg]     = {0.08f, 0.08f, 0.11f, 1.f};
 }

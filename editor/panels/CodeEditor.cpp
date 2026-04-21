@@ -142,7 +142,6 @@ void CodeEditor::drawMenuItem() {
 
 void CodeEditor::draw() {
     if (!m_visible) return;
-    m_editor->applyInitRect(1);
     ImGui::Begin("Code Editor", &m_visible);
 
     if (m_buffers.empty()) {

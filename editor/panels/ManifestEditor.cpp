@@ -29,7 +29,6 @@ void ManifestEditor::onProjectOpened(const fs::path& projectPath) {
 
 void ManifestEditor::draw() {
     if (!m_visible) return;
-    m_editor->applyInitRect(5);
     ImGui::Begin("Manifest", &m_visible);
     ImGui::TextColored({0.6f, 0.8f, 1.f, 1.f}, "manifest.json");
     ImGui::Separator();

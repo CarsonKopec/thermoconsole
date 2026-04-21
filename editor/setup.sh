@@ -5,13 +5,29 @@ cd "$(dirname "$0")"
 
 echo "=== ThermoConsole Editor Setup ==="
 
-# 1. Clone ImGui (master — no docking branch needed)
+# 1. Clone ImGui (docking branch — required for dockable/tear-off panels).
+# If a stale master-branch clone is present, rewire it to docking so we don't
+# quietly build against the wrong branch.
+IMGUI_URL="https://github.com/ocornut/imgui"
+IMGUI_BRANCH="docking"
+
 if [ ! -f vendor/imgui/imgui.h ]; then
-    echo "Cloning Dear ImGui..."
+    echo "Cloning Dear ImGui (branch: ${IMGUI_BRANCH})..."
     mkdir -p vendor
-    git clone --depth 1 https://github.com/ocornut/imgui vendor/imgui
+    git clone --depth 1 -b "${IMGUI_BRANCH}" "${IMGUI_URL}" vendor/imgui
 else
-    echo "ImGui already present."
+    current_branch="$(git -C vendor/imgui rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+    if [ "${current_branch}" != "${IMGUI_BRANCH}" ]; then
+        echo "ImGui clone is on '${current_branch}', switching to '${IMGUI_BRANCH}'..."
+        # --depth 1 clones don't carry the other branch; refetch just the branch we need.
+        git -C vendor/imgui fetch --depth 1 origin "${IMGUI_BRANCH}:${IMGUI_BRANCH}" \
+            || { echo "Reclone required — removing stale vendor/imgui."; \
+                 rm -rf vendor/imgui; \
+                 git clone --depth 1 -b "${IMGUI_BRANCH}" "${IMGUI_URL}" vendor/imgui; }
+        git -C vendor/imgui checkout "${IMGUI_BRANCH}" 2>/dev/null || true
+    else
+        echo "ImGui (${IMGUI_BRANCH}) already present."
+    fi
 fi
 
 # 2. Configure + build

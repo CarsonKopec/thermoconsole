@@ -213,7 +213,6 @@ void SpriteEditor::redo() {
 
 void SpriteEditor::draw() {
     if (!m_visible) return;
-    m_editor->applyInitRect(4);
     ImGui::Begin("Sprite Editor", &m_visible);
 
     // Keyboard shortcuts (only when this window has focus)

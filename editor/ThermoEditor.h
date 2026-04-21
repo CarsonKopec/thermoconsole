@@ -106,10 +106,6 @@ public:
     void openFile(const fs::path& path);
     void refreshFileTree();
 
-    // Called by panels to get a sensible first-run position/size.
-    // panelIndex: 0=Files 1=Code 2=Console 3=GamePreview 4=Sprite 5=Manifest
-    void applyInitRect(int panelIndex) const;
-
     // SDL accessors
     SDL_Renderer* renderer() { return m_renderer; }
     SDL_Window*   window()   { return m_window;   }
@@ -151,9 +147,12 @@ private:
     void drawAboutModal();
     void drawOpenProjectModal();   // centralized so it works from menu, welcome, shortcut
     void handleShortcuts();
-    void positionPanels();
-    bool m_layoutApplied = false;
 
-    // First-frame panel positions (x, y, w, h)
-    float m_initRects[6][4] {};
+    // Docking — a DockSpace hosts every panel. The first time the editor runs
+    // (or after "Reset Layout") we call buildDefaultDockLayout() to arrange
+    // the panels in a sensible IDE layout. After that ImGui persists the
+    // user's layout to imgui.ini.
+    ImGuiID m_dockspaceId = 0;
+    bool    m_buildDefaultLayout = true;  // true on first frame & after reset
+    void    buildDefaultDockLayout(ImGuiID dockspaceId);
 };

@@ -35,6 +35,27 @@ cmake --build build-debug
 | Game Preview  | Launch the runtime; stdout/stderr stream to the console.               |
 | Console       | Filterable, timestamped log view. Auto-scroll toggle.                  |
 
+## Docking
+
+The editor uses Dear ImGui's docking branch. Every panel is dockable:
+
+- **Snap panels to each other** — drag a panel's title bar; ImGui shows drop
+  zones on every other docked window (left/right/top/bottom) and in the
+  dockspace edges. Drop on a zone to split that region.
+- **Tab panels together** — drop one panel onto another's title bar to group
+  them in a tab bar. Click a tab to switch, reorder by dragging tabs.
+- **Pop out a panel** — drag a panel's title (or its tab) out of its dock
+  slot to tear it off into a floating window you can move freely.
+- **Re-dock** — drag a floating panel back over any dock zone to re-attach,
+  or double-click its title bar to snap back to the last dock location.
+- **Reset layout** — `View > Reset Layout` restores the default IDE
+  arrangement (Files left, Code center, Console bottom, Game Preview +
+  Manifest tabbed on the right, Sprite Editor under them).
+
+Your layout is persisted to `imgui.ini` next to the executable, so splits,
+tab groups, and pop-outs survive restarts. Delete that file (or pick Reset
+Layout) to start fresh.
+
 ## Keyboard Shortcuts
 
 | Action                       | Shortcut              |
@@ -50,6 +71,35 @@ cmake --build build-debug
 
 Shortcuts no longer get eaten by whichever window happens to be focused —
 `Ctrl+S` works from inside the code editor, and `F5`/`F6` fire anywhere.
+
+## What changed in 1.1.0
+
+This release makes the panels fully dockable and tearable. The editor now
+uses the Dear ImGui **docking** branch.
+
+### New — dockable, pop-out, tab-group panels
+- Every panel can be docked to any edge of another panel, tabbed together,
+  or torn off into a floating window that you can move anywhere.
+- A **DockSpace** fills the main window; panels dock into it instead of
+  being pinned to hardcoded rectangles.
+- The default layout (Files, Code, Console, Game Preview/Manifest tabbed,
+  Sprite Editor) is built via `DockBuilder` on first run.
+- `View > Reset Layout` rebuilds the default layout at any time.
+- Your layout is persisted by ImGui to `imgui.ini` automatically — splits,
+  tab groups, and pop-out windows are restored on next launch.
+
+### Removed
+- The old first-frame `positionPanels` / `applyInitRect` / `m_initRects`
+  machinery is gone. Position, size, splits, tab grouping, and detach
+  state are all owned by ImGui's docking system now.
+
+### Setup notes
+- `setup.sh` now clones the `docking` branch and will rewire an existing
+  `vendor/imgui` clone that was on `master`.
+- The `SDL_Renderer2` backend is kept, which means torn-off panels are
+  floating ImGui windows *inside* the editor window (they can be moved
+  anywhere within it). A future release may swap the backend to OpenGL3
+  to enable true OS-level multi-viewports.
 
 ## What changed in 1.0.1
 

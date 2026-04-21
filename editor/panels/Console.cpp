@@ -39,7 +39,6 @@ void Console::addLine(const std::string& msg, bool isError) {
 
 void Console::draw() {
     if (!m_visible) return;
-    m_editor->applyInitRect(2);
     ImGui::Begin("Console", &m_visible);
 
     // ── Toolbar ─────────────────────────────────────────────────────────────

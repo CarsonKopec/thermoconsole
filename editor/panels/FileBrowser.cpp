@@ -101,7 +101,6 @@ bool FileBrowser::matchesFilter(const Node& n, const std::string& filterLower) c
 
 void FileBrowser::draw() {
     if (!m_visible) return;
-    m_editor->applyInitRect(0);
     ImGui::Begin("Files", &m_visible);
 
     if (!m_rootNode) {

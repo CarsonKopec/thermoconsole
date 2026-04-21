@@ -42,7 +42,6 @@ void GamePreview::onProjectOpened(const fs::path& projectPath) {
 
 void GamePreview::draw() {
     if (!m_visible) return;
-    m_editor->applyInitRect(3);
     ImGui::Begin("Game Preview", &m_visible);
 
     const bool running = m_running.load();
