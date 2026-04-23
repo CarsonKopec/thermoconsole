@@ -1,0 +1,21 @@
+# Build output
+build/
+build-debug/
+dist/
+
+# Vendored dependencies (pulled by thermo.py setup)
+editor/vendor/
+
+# Python
+__pycache__/
+*.pyc
+
+# Editor / IDE junk
+.vs/
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Editor-generated layout cache
+imgui.ini
