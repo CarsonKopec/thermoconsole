@@ -263,7 +263,10 @@ ThermoColor color_from_hex(uint32_t hex);
  * Default Palette (PICO-8 colors)
  * ───────────────────────────────────────────────────────────────────────────── */
 
-static const ThermoColor DEFAULT_PALETTE[THERMO_PALETTE_SIZE] = {
+/* Renamed from DEFAULT_PALETTE — Windows' wingdi.h #defines that to the
+ * integer 15 for a GDI stock-object constant, which made this line parse
+ * as  static const ThermoColor 15[...] = {...}  on MSVC. */
+static const ThermoColor THERMO_DEFAULT_PALETTE[THERMO_PALETTE_SIZE] = {
     {0x00, 0x00, 0x00, 0xFF},  /* 0  - Black */
     {0x1D, 0x2B, 0x53, 0xFF},  /* 1  - Dark Blue */
     {0x7E, 0x25, 0x53, 0xFF},  /* 2  - Dark Purple */

@@ -97,8 +97,15 @@ set(THERMO_SOURCES
     src/rom.c
     src/lua_api.c
     src/script.c
-    src/system_api.c
 )
+
+# system_api.c is the hardware system menu — it uses dirent.h, unlink/symlink,
+# /sys/class/thermal, /home/pi paths, and amixer. It only makes sense on the
+# actual Pi console, so skip it on Windows/Mac desktop builds. Nothing else
+# in the runtime currently calls into it, so excluding it doesn't break links.
+if(UNIX)
+    list(APPEND THERMO_SOURCES src/system_api.c)
+endif()
 
 if(THERMO_PICO_USB)
     message(STATUS "Audio: Pico via USB serial (sound + buttons)")

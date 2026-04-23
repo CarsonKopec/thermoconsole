@@ -263,8 +263,8 @@ int gfx_init(void) {
     }
     
     /* Initialize palette */
-    memcpy(gfx->palette, DEFAULT_PALETTE, sizeof(DEFAULT_PALETTE));
-    memcpy(gfx->palette_remap, DEFAULT_PALETTE, sizeof(DEFAULT_PALETTE));
+    memcpy(gfx->palette, THERMO_DEFAULT_PALETTE, sizeof(THERMO_DEFAULT_PALETTE));
+    memcpy(gfx->palette_remap, THERMO_DEFAULT_PALETTE, sizeof(THERMO_DEFAULT_PALETTE));
     
     /* Initialize camera */
     gfx->camera_x = 0;
