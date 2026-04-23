@@ -1,4 +1,0 @@
-C:/Users/kopec/Development/thermoconsole/runtime/build/CMakeFiles/thermoconsole.dir
-C:/Users/kopec/Development/thermoconsole/runtime/build/CMakeFiles/INSTALL.dir
-C:/Users/kopec/Development/thermoconsole/runtime/build/CMakeFiles/ALL_BUILD.dir
-C:/Users/kopec/Development/thermoconsole/runtime/build/CMakeFiles/ZERO_CHECK.dir
