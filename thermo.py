@@ -26,9 +26,11 @@ from __future__ import annotations
 import argparse
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Optional, Sequence
@@ -39,6 +41,23 @@ from typing import Iterable, Optional, Sequence
 for _stream in (sys.stdout, sys.stderr):
     try:
         _stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+# Windows cmd.exe doesn't render ANSI escapes by default. Flip
+# ENABLE_VIRTUAL_TERMINAL_PROCESSING on both output handles so colored output
+# works there too. Already-VT-aware terminals (PowerShell 7, Windows Terminal,
+# cmd.exe on recent Win10+) are unaffected.
+if sys.platform == "win32":
+    try:
+        import ctypes
+        _kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        _ENABLE_VT = 0x0004
+        for _handle_id in (-11, -12):  # STD_OUTPUT_HANDLE, STD_ERROR_HANDLE
+            _h = _kernel32.GetStdHandle(_handle_id)
+            _mode = ctypes.c_uint32()
+            if _kernel32.GetConsoleMode(_h, ctypes.byref(_mode)):
+                _kernel32.SetConsoleMode(_h, _mode.value | _ENABLE_VT)
     except Exception:
         pass
 
@@ -73,6 +92,10 @@ PICO_DIR    = ROOT / "pico-controller"
 
 IMGUI_URL    = "https://github.com/ocornut/imgui"
 IMGUI_BRANCH = "docking"
+# Pin to a specific docking-branch release so `thermo setup` is reproducible
+# across machines. Override with `--imgui-ref`; bump this constant to update
+# the default. Fall back to bare branch HEAD if the ref doesn't exist remotely.
+IMGUI_REF    = "v1.91.9-docking"
 
 IS_WINDOWS = sys.platform == "win32"
 IS_MACOS   = sys.platform == "darwin"
@@ -164,38 +187,31 @@ def check_deps() -> list[DepStatus]:
         hint="Install git from https://git-scm.com",
     ))
 
-    # SDL2 is platform-specific to verify. We rely on CMake's find_package
-    # at build time; here we just surface the best-effort signal.
-    sdl_hint = ""
-    if IS_LINUX:
-        mgr = detect_linux_pkg_mgr()
-        if mgr == "apt-get":
-            sdl_hint = "sudo apt-get install -y libsdl2-dev libsdl2-image-dev"
-        elif mgr == "dnf":
-            sdl_hint = "sudo dnf install -y SDL2-devel SDL2_image-devel"
-        elif mgr == "pacman":
-            sdl_hint = "sudo pacman -S sdl2 sdl2_image"
-    elif IS_MACOS:
-        sdl_hint = "brew install sdl2 sdl2_image"
-    else:  # Windows
-        sdl_hint = "vcpkg install sdl2 sdl2-image  (and set CMAKE_TOOLCHAIN_FILE)"
+    # SDL2 — try a real check first, fall back to "trust CMake" with guidance.
+    sdl_found, sdl_detail, sdl_hint = _check_sdl2()
+    results.append(DepStatus("SDL2 (dev)", sdl_found, detail=sdl_detail, hint=sdl_hint))
 
-    results.append(DepStatus(
-        "SDL2 (dev)", True,   # can't cheaply verify — defer to CMake
-        detail="verified at build time by CMake find_package",
-        hint=sdl_hint,
-    ))
-
-    # ImGui docking branch (vendored into editor/vendor/imgui)
-    imgui_header = EDITOR_DIR / "vendor" / "imgui" / "imgui.h"
-    branch = _git_current_branch(EDITOR_DIR / "vendor" / "imgui")
-    detail = f"branch={branch}" if branch else "not cloned"
-    on_right_branch = branch == IMGUI_BRANCH
+    # ImGui — vendored into editor/vendor/imgui, pinned to IMGUI_REF.
+    imgui_repo = EDITOR_DIR / "vendor" / "imgui"
+    imgui_header = imgui_repo / "imgui.h"
+    branch = _git_current_branch(imgui_repo)
+    sha    = _git_head_sha(imgui_repo)
+    if imgui_header.exists():
+        short_sha = sha[:10] if sha else "?"
+        ref_label = branch if branch and branch != "HEAD" else short_sha
+        on_pin = branch == IMGUI_REF or (sha and sha.startswith(IMGUI_REF))
+        # Tolerate "on the docking branch" as a soft pass — users may have
+        # bumped past the pin intentionally during development.
+        acceptable = on_pin or branch == IMGUI_BRANCH
+        detail = f"at {ref_label}" + ("" if on_pin else f"  (pin: {IMGUI_REF})")
+    else:
+        acceptable = False
+        detail = "not cloned"
     results.append(DepStatus(
         "Dear ImGui (editor/vendor/imgui)",
-        imgui_header.exists() and on_right_branch,
+        acceptable,
         detail=detail,
-        hint=f"python thermo.py setup  (clones the '{IMGUI_BRANCH}' branch)",
+        hint=f"python thermo.py setup  (pins to '{IMGUI_REF}')",
     ))
 
     return results
@@ -208,6 +224,52 @@ def _capture_version(cmd: Sequence[str]) -> str:
         return first[0].strip() if first else ""
     except FileNotFoundError:
         return ""
+
+
+def _check_sdl2() -> tuple[bool, str, str]:
+    """Return (found, detail, hint) for SDL2+SDL2_image.
+
+    On Linux/macOS we trust `pkg-config`. On Windows we look for a vcpkg
+    installed manifest if VCPKG_ROOT is set. Everywhere else we fall through
+    to a soft "defer to CMake" signal.
+    """
+    # pkg-config covers Linux distros and Homebrew on macOS
+    if have("pkg-config"):
+        pkgs = ["sdl2", "SDL2_image"]
+        r = subprocess.run(["pkg-config", "--exists", *pkgs],
+                           capture_output=True, text=True, check=False)
+        if r.returncode == 0:
+            ver = subprocess.run(["pkg-config", "--modversion", "sdl2"],
+                                 capture_output=True, text=True, check=False)
+            return True, f"sdl2 {ver.stdout.strip() or '?'} (pkg-config)", ""
+
+    # vcpkg on Windows — look in $VCPKG_ROOT/installed/*/include/SDL2/SDL.h
+    if IS_WINDOWS:
+        vcpkg_root = os.environ.get("VCPKG_ROOT")
+        if vcpkg_root:
+            installed = Path(vcpkg_root) / "installed"
+            if installed.exists():
+                for triplet in installed.iterdir():
+                    if (triplet / "include" / "SDL2" / "SDL.h").exists():
+                        return True, f"vcpkg ({triplet.name})", ""
+
+    # Best-effort hint text per platform
+    if IS_LINUX:
+        mgr = detect_linux_pkg_mgr()
+        hints = {
+            "apt-get": "sudo apt-get install -y libsdl2-dev libsdl2-image-dev",
+            "dnf":     "sudo dnf install -y SDL2-devel SDL2_image-devel",
+            "pacman":  "sudo pacman -S sdl2 sdl2_image",
+            "zypper":  "sudo zypper install -y SDL2-devel SDL2_image-devel",
+        }
+        hint = hints.get(mgr or "", "install SDL2 and SDL2_image via your package manager")
+    elif IS_MACOS:
+        hint = "brew install sdl2 sdl2_image"
+    elif IS_WINDOWS:
+        hint = "vcpkg install sdl2 sdl2-image  (and set VCPKG_ROOT)"
+    else:
+        hint = "install SDL2 and SDL2_image dev packages"
+    return False, "not detected", hint
 
 
 def _git_current_branch(repo: Path) -> Optional[str]:
@@ -281,9 +343,21 @@ def install_system_deps(assume_yes: bool) -> None:
     warn(f"Unknown platform {sys.platform}; skipping system deps.")
 
 
-def clone_or_update_imgui() -> None:
-    """Ensure editor/vendor/imgui is a clone of the docking branch."""
-    step(f"Fetching Dear ImGui ({IMGUI_BRANCH} branch)")
+def _git_head_sha(repo: Path) -> Optional[str]:
+    r = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
+                       capture_output=True, text=True, check=False)
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def clone_or_update_imgui(ref: Optional[str] = None, update: bool = False) -> None:
+    """Ensure editor/vendor/imgui is checked out at `ref` (tag, branch, or SHA).
+
+    Defaults to IMGUI_REF for reproducible builds. `--update-imgui` forces a
+    re-fetch even if the clone already matches, so you can bump the pin
+    temporarily without editing the file.
+    """
+    target_ref = ref or IMGUI_REF
+    step(f"Fetching Dear ImGui @ {target_ref}")
 
     if not have("git"):
         err("git is required. Install it and re-run.")
@@ -293,39 +367,62 @@ def clone_or_update_imgui() -> None:
     target = vendor / "imgui"
     vendor.mkdir(parents=True, exist_ok=True)
 
+    def _fresh_clone() -> None:
+        """Shallow-clone at target_ref, falling back to the docking branch
+        if the pinned ref doesn't exist (e.g. typo, tag moved, offline)."""
+        info(f"Cloning {IMGUI_URL} @ {target_ref} into {target.relative_to(ROOT)}")
+        r = subprocess.run(
+            ["git", "clone", "--depth", "1", "-b", target_ref, IMGUI_URL, str(target)],
+            check=False,
+        )
+        if r.returncode != 0:
+            warn(f"Ref '{target_ref}' not found; falling back to branch '{IMGUI_BRANCH}'.")
+            if target.exists():
+                shutil.rmtree(target)
+            run(["git", "clone", "--depth", "1", "-b", IMGUI_BRANCH,
+                 IMGUI_URL, str(target)])
+        sha = _git_head_sha(target)
+        ok(f"ImGui clone complete ({sha[:10] if sha else '?'}).")
+
     if not (target / ".git").exists():
-        info(f"Cloning {IMGUI_URL} @ {IMGUI_BRANCH} into {target.relative_to(ROOT)}")
-        run(["git", "clone", "--depth", "1",
-             "-b", IMGUI_BRANCH, IMGUI_URL, str(target)])
-        ok("ImGui clone complete.")
+        _fresh_clone()
         return
 
-    current = _git_current_branch(target)
-    if current == IMGUI_BRANCH:
-        info(f"ImGui already on '{IMGUI_BRANCH}'. Fetching updates…")
-        run(["git", "-C", str(target), "fetch", "--depth", "1",
-             "origin", IMGUI_BRANCH], check=False)
-        run(["git", "-C", str(target), "reset", "--hard",
-             f"origin/{IMGUI_BRANCH}"], check=False)
-        ok("ImGui up to date.")
+    current_branch = _git_current_branch(target)
+    current_sha    = _git_head_sha(target)
+
+    # Already at the pinned ref (by branch name or exact SHA) — nothing to do
+    # unless the caller asked for --update-imgui.
+    if not update and (current_branch == target_ref
+                       or (current_sha and current_sha.startswith(target_ref))):
+        ok(f"ImGui already at '{target_ref}' ({current_sha[:10] if current_sha else '?'}).")
         return
 
-    # Wrong branch — rewire. --depth clones don't carry other branches, so
-    # fetch the right one explicitly or re-clone as a fallback.
-    warn(f"ImGui clone is on '{current}', switching to '{IMGUI_BRANCH}'.")
+    # Try to move the existing clone to the target ref. Shallow clones don't
+    # carry arbitrary refs, so fetch the exact one and then check it out.
+    info(f"Moving existing clone from '{current_branch or current_sha}' to '{target_ref}'.")
     fetched = subprocess.run(
-        ["git", "-C", str(target), "fetch", "--depth", "1", "origin",
-         f"{IMGUI_BRANCH}:{IMGUI_BRANCH}"],
+        ["git", "-C", str(target), "fetch", "--depth", "1", "origin", target_ref],
         check=False,
     )
     if fetched.returncode != 0:
         warn("Fetch failed — removing and re-cloning.")
         shutil.rmtree(target)
-        run(["git", "clone", "--depth", "1",
-             "-b", IMGUI_BRANCH, IMGUI_URL, str(target)])
-    else:
-        run(["git", "-C", str(target), "checkout", IMGUI_BRANCH])
-    ok(f"ImGui switched to '{IMGUI_BRANCH}'.")
+        _fresh_clone()
+        return
+
+    checkout = subprocess.run(
+        ["git", "-C", str(target), "checkout", "--detach", "FETCH_HEAD"],
+        check=False,
+    )
+    if checkout.returncode != 0:
+        warn("Checkout failed — removing and re-cloning.")
+        shutil.rmtree(target)
+        _fresh_clone()
+        return
+
+    sha = _git_head_sha(target)
+    ok(f"ImGui now at '{target_ref}' ({sha[:10] if sha else '?'}).")
 
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -338,6 +435,10 @@ class BuildTarget:
     source_dir: Path
     build_dir: Path
     requires_imgui: bool = False
+    requires_pico_sdk: bool = False
+    # Opt-in targets aren't built by `thermo build all` — the pico firmware
+    # needs a cross-compiler toolchain most contributors don't have.
+    in_all: bool = True
     extra_cmake_args: list[str] = field(default_factory=list)
 
 
@@ -352,6 +453,13 @@ TARGETS: dict[str, BuildTarget] = {
         source_dir=EDITOR_DIR,
         build_dir=EDITOR_DIR / "build",
         requires_imgui=True,
+    ),
+    "pico": BuildTarget(
+        name="pico",
+        source_dir=PICO_DIR,
+        build_dir=PICO_DIR / "build",
+        requires_pico_sdk=True,
+        in_all=False,
     ),
 }
 
@@ -390,6 +498,13 @@ def build_target(name: str, *, debug: bool, clean: bool, jobs: Optional[int]) ->
         warn("ImGui missing; fetching it now.")
         clone_or_update_imgui()
 
+    if t.requires_pico_sdk and not os.environ.get("PICO_SDK_PATH"):
+        err("PICO_SDK_PATH is not set. The pico firmware needs the Raspberry "
+            "Pi Pico SDK.")
+        info("Install: https://github.com/raspberrypi/pico-sdk")
+        info("Then: export PICO_SDK_PATH=/path/to/pico-sdk")
+        raise SystemExit(1)
+
     step(f"Building {t.name} ({'Debug' if debug else 'Release'})")
 
     if clean and t.build_dir.exists():
@@ -427,6 +542,13 @@ def clean_target(name: str) -> None:
         err(f"Unknown clean target '{name}'. Known: {', '.join(TARGETS)}, all")
         raise SystemExit(2)
     _rm(TARGETS[name].build_dir)
+
+
+def _targets_for(name: str) -> list[str]:
+    """Resolve 'all' to the default set (everything with in_all=True)."""
+    if name == "all":
+        return [k for k, t in TARGETS.items() if t.in_all]
+    return [name]
 
 
 def _rm(path: Path) -> None:
@@ -539,6 +661,98 @@ def sdk_passthrough(script: str, args: list[str]) -> int:
 
 
 # ───────────────────────────────────────────────────────────────────────────
+# Package — bundle built binaries + SDK + games into a release zip
+# ───────────────────────────────────────────────────────────────────────────
+
+_VERSION_RE = re.compile(r"project\s*\([^)]*VERSION\s+([0-9][0-9.]*)", re.IGNORECASE)
+
+
+def _read_project_version() -> str:
+    """Extract VERSION from editor/CMakeLists.txt (authoritative for releases)."""
+    cmake = EDITOR_DIR / "CMakeLists.txt"
+    if cmake.exists():
+        m = _VERSION_RE.search(cmake.read_text(encoding="utf-8", errors="ignore"))
+        if m:
+            return m.group(1)
+    return "0.0.0"
+
+
+def _platform_tag() -> str:
+    arch = platform.machine().lower()
+    # Normalize x86_64 aliases across platforms
+    arch = {"amd64": "x64", "x86_64": "x64"}.get(arch, arch)
+    if IS_WINDOWS: return f"win-{arch}"
+    if IS_MACOS:   return f"macos-{arch}"
+    if IS_LINUX:   return f"linux-{arch}"
+    return sys.platform
+
+
+def _zip_add_file(zf: zipfile.ZipFile, src: Path, arcname: str) -> None:
+    info(_c("90", f"  + {arcname}"))
+    zf.write(src, arcname)
+
+
+def _zip_add_tree(zf: zipfile.ZipFile, src: Path, arc_root: str,
+                  ignore: Iterable[str] = ()) -> None:
+    if not src.exists():
+        return
+    ignore_set = set(ignore)
+    for path in sorted(src.rglob("*")):
+        if path.is_dir():
+            continue
+        # Skip common junk: build dirs, .git, __pycache__
+        rel = path.relative_to(src)
+        parts = set(rel.parts)
+        if parts & {"build", ".git", "__pycache__", ".vs", ".vscode"}:
+            continue
+        if path.name in ignore_set:
+            continue
+        _zip_add_file(zf, path, f"{arc_root}/{rel.as_posix()}")
+
+
+def cmd_package(output: Optional[Path]) -> int:
+    step("ThermoConsole — package")
+
+    editor_bin  = find_editor_bin()
+    runtime_bin = find_runtime_bin()
+    if not editor_bin and not runtime_bin:
+        err("Nothing to package — neither editor nor runtime is built.")
+        info("Run: python thermo.py build")
+        return 1
+    if not editor_bin:
+        warn("Editor binary missing — packaging without it.")
+    if not runtime_bin:
+        warn("Runtime binary missing — packaging without it.")
+
+    version  = _read_project_version()
+    tag      = _platform_tag()
+    dist_dir = ROOT / "dist"
+    dist_dir.mkdir(exist_ok=True)
+    zip_path = output or dist_dir / f"thermoconsole-{version}-{tag}.zip"
+    if zip_path.exists():
+        zip_path.unlink()
+
+    info(f"Writing {zip_path.relative_to(ROOT)}")
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        if editor_bin:
+            _zip_add_file(zf, editor_bin, f"bin/{editor_bin.name}")
+        if runtime_bin:
+            _zip_add_file(zf, runtime_bin, f"bin/{runtime_bin.name}")
+
+        _zip_add_tree(zf, SDK_DIR,   "sdk")
+        _zip_add_tree(zf, GAMES_DIR, "games")
+
+        for top in ("launch.py", "README.md", "LICENSE", "LICENSE.md"):
+            p = ROOT / top
+            if p.exists():
+                _zip_add_file(zf, p, top)
+
+    size_mb = zip_path.stat().st_size / (1024 * 1024)
+    ok(f"Packaged {version} for {tag} → {zip_path.relative_to(ROOT)} ({size_mb:.1f} MB)")
+    return 0
+
+
+# ───────────────────────────────────────────────────────────────────────────
 # Status & doctor
 # ───────────────────────────────────────────────────────────────────────────
 
@@ -552,6 +766,8 @@ def cmd_status() -> int:
     for label, finder in [("runtime", find_runtime_bin), ("editor", find_editor_bin)]:
         b = finder()
         print(f"    {label:8} : {b.relative_to(ROOT) if b else _c('90', '(not built)')}")
+    pico_uf2 = next((PICO_DIR / "build").glob("*.uf2"), None) if (PICO_DIR / "build").exists() else None
+    print(f"    {'pico':8} : {pico_uf2.relative_to(ROOT) if pico_uf2 else _c('90', '(not built)')}")
 
     print("\n  Dependencies:")
     for d in check_deps():
@@ -606,10 +822,16 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Skip interactive confirmations during package install.")
     ps.add_argument("--skip-system", action="store_true",
                     help="Skip OS package installation (ImGui only).")
+    ps.add_argument("--imgui-ref", metavar="REF",
+                    help=f"Override the ImGui pin (default: {IMGUI_REF}). "
+                         "Tag, branch, or SHA.")
+    ps.add_argument("--update-imgui", action="store_true",
+                    help="Force re-fetch of ImGui even if already at the pin.")
 
-    pb = sub.add_parser("build", help="Build runtime, editor, or both.")
-    pb.add_argument("target", nargs="?", default="all",
-                    choices=["all", "editor", "runtime"])
+    build_choices = ["all"] + list(TARGETS)
+    pb = sub.add_parser("build", help="Build runtime, editor, pico, or all.")
+    pb.add_argument("target", nargs="?", default="all", choices=build_choices,
+                    help="Target to build. 'all' skips opt-in targets like pico.")
     pb.add_argument("--debug", action="store_true", help="Debug build.")
     pb.add_argument("--clean", action="store_true",
                     help="Wipe build dir before configuring.")
@@ -617,8 +839,11 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Parallel build jobs (default: all cores).")
 
     pc = sub.add_parser("clean", help="Remove build artifacts.")
-    pc.add_argument("target", nargs="?", default="all",
-                    choices=["all", "editor", "runtime"])
+    pc.add_argument("target", nargs="?", default="all", choices=build_choices)
+
+    pkg = sub.add_parser("package", help="Bundle built binaries + SDK + games into a release zip.")
+    pkg.add_argument("-o", "--output", type=Path,
+                     help="Output zip path (default: dist/thermoconsole-<ver>-<platform>.zip).")
 
     pr = sub.add_parser("run", help="Run the editor, a game, or the launcher.")
     pr_sub = pr.add_subparsers(dest="what", required=True, metavar="what")
@@ -652,21 +877,21 @@ def main(argv: Optional[list[str]] = None) -> int:
         if args.command == "setup":
             if not args.skip_system:
                 install_system_deps(assume_yes=args.yes)
-            clone_or_update_imgui()
+            clone_or_update_imgui(ref=args.imgui_ref, update=args.update_imgui)
             ok("Setup complete. Try: python thermo.py build")
             return 0
 
         if args.command == "build":
-            if args.target == "all":
-                build_target("runtime", debug=args.debug, clean=args.clean, jobs=args.jobs)
-                build_target("editor",  debug=args.debug, clean=args.clean, jobs=args.jobs)
-            else:
-                build_target(args.target, debug=args.debug, clean=args.clean, jobs=args.jobs)
+            for name in _targets_for(args.target):
+                build_target(name, debug=args.debug, clean=args.clean, jobs=args.jobs)
             return 0
 
         if args.command == "clean":
             clean_target(args.target)
             return 0
+
+        if args.command == "package":
+            return cmd_package(args.output)
 
         if args.command == "run":
             if args.what == "editor":
