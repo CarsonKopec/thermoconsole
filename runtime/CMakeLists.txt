@@ -40,7 +40,7 @@ set(_VENDOR_DIR ${CMAKE_SOURCE_DIR}/../vendor)
 set(_SDL_VENDORED FALSE)
 
 if(EXISTS ${_VENDOR_DIR}/SDL/include/SDL.h AND
-   EXISTS ${_VENDOR_DIR}/SDL_image/SDL_image.h AND
+   EXISTS ${_VENDOR_DIR}/SDL_image/include/SDL_image.h AND
    EXISTS ${_VENDOR_DIR}/SDL_mixer/include/SDL_mixer.h)
     # Build all three SDL libs from vendored sources. Static link, no tests,
     # only format/codec loaders we actually use (PNG for SDL_image; OGG/WAV
