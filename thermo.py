@@ -228,8 +228,8 @@ def check_deps() -> list[DepStatus]:
     # pre-vcpkg/brew/apt setup still see a pass.
     for dep_name, header in (
         ("SDL",       "include/SDL.h"),
-        ("SDL_image", "SDL_image.h"),
-        ("SDL_mixer", "SDL_mixer.h"),
+        ("SDL_image", "include/SDL_image.h"),
+        ("SDL_mixer", "include/SDL_mixer.h"),
     ):
         dep = _dep(dep_name)
         vend = VENDOR_DIR / dep.dir
@@ -302,7 +302,7 @@ def _check_sdl2() -> tuple[bool, str, str]:
     """
     # Vendored sources win — that's what CMake prefers too.
     if (VENDOR_DIR / "SDL" / "include" / "SDL.h").exists() and \
-       (VENDOR_DIR / "SDL_image" / "SDL_image.h").exists():
+       (VENDOR_DIR / "SDL_image" / "include" / "SDL_image.h").exists():
         return True, "vendored (vendor/SDL, vendor/SDL_image)", ""
 
     # pkg-config covers Linux distros and Homebrew on macOS
@@ -516,9 +516,10 @@ def clone_or_update_imgui(ref: Optional[str] = None, update: bool = False) -> No
 _VENDOR_PROBES: dict[str, str] = {
     "imgui":     "imgui.h",
     "SDL":       "include/SDL.h",
-    "SDL_image": "SDL_image.h",
-    "SDL_mixer": "SDL_mixer.h",
-    "lua":       "src/lua.h",
+    "SDL_image": "include/SDL_image.h",
+    "SDL_mixer": "include/SDL_mixer.h",
+    # github.com/lua/lua puts sources at the repo root, not in src/.
+    "lua":       "lua.h",
 }
 
 

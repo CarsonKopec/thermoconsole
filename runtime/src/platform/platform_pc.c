@@ -22,7 +22,7 @@
 #define PATH_SEP '/'
 #endif
 
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #include "thermo.h"
 #include "platform.h"
 

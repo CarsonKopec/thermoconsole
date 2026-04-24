@@ -24,7 +24,7 @@
 #include <sys/stat.h>
 #include <termios.h>
 
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #include "thermo.h"
 #include "platform.h"
 

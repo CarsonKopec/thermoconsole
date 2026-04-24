@@ -40,11 +40,14 @@ set(_VENDOR_DIR ${CMAKE_SOURCE_DIR}/../vendor)
 set(_SDL_VENDORED FALSE)
 
 if(EXISTS ${_VENDOR_DIR}/SDL/include/SDL.h AND
-   EXISTS ${_VENDOR_DIR}/SDL_image/SDL_image.h AND
+   EXISTS ${_VENDOR_DIR}/SDL_image/include/SDL_image.h AND
    EXISTS ${_VENDOR_DIR}/SDL_mixer/include/SDL_mixer.h)
     # Build all three SDL libs from vendored sources. Static link, no tests,
     # only format/codec loaders we actually use (PNG for SDL_image; OGG/WAV
     # for SDL_mixer) so we don't drag libjpeg/libwebp/libflac into the build.
+    # BUILD_SHARED_LIBS=OFF is the global override SDL_image and SDL_mixer
+    # key off to set INTERFACE_SDL2_SHARED=FALSE on their exported targets.
+    set(BUILD_SHARED_LIBS  OFF CACHE BOOL "" FORCE)
     set(SDL_SHARED         OFF CACHE BOOL "" FORCE)
     set(SDL_STATIC         ON  CACHE BOOL "" FORCE)
     set(SDL_TEST           OFF CACHE BOOL "" FORCE)
@@ -97,7 +100,7 @@ endif()
 
 set(_LUA_VENDORED FALSE)
 
-if(EXISTS ${_VENDOR_DIR}/lua/src/lua.h)
+if(EXISTS ${_VENDOR_DIR}/lua/src/lua.h OR EXISTS ${_VENDOR_DIR}/lua/lua.h)
     include(${CMAKE_SOURCE_DIR}/../cmake/lua.cmake)
     set(_LUA_VENDORED TRUE)
 else()

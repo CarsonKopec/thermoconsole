@@ -13,7 +13,7 @@
  */
 
 #include "../ThermoEditor.h"
-#include <SDL2/SDL.h>
+#include <SDL.h>
 
 #include <array>
 #include <cstdint>

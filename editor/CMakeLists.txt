@@ -48,9 +48,11 @@ set(IMGUI_SOURCES
 set(_SDL_VENDORED FALSE)
 
 if(EXISTS ${_VENDOR_DIR}/SDL/include/SDL.h AND
-   EXISTS ${_VENDOR_DIR}/SDL_image/SDL_image.h)
+   EXISTS ${_VENDOR_DIR}/SDL_image/include/SDL_image.h)
     # Build the SDL deps from the vendored sources. Static link, no tests, and
     # only PNG loader in SDL_image so we don't need libjpeg/libwebp/libavif.
+    # BUILD_SHARED_LIBS=OFF keeps SDL_image's INTERFACE_SDL2_SHARED aligned.
+    set(BUILD_SHARED_LIBS  OFF CACHE BOOL "" FORCE)
     set(SDL_SHARED         OFF CACHE BOOL "" FORCE)
     set(SDL_STATIC         ON  CACHE BOOL "" FORCE)
     set(SDL_TEST           OFF CACHE BOOL "" FORCE)
