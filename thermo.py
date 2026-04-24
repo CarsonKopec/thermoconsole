@@ -518,7 +518,8 @@ _VENDOR_PROBES: dict[str, str] = {
     "SDL":       "include/SDL.h",
     "SDL_image": "include/SDL_image.h",
     "SDL_mixer": "include/SDL_mixer.h",
-    "lua":       "src/lua.h",
+    # github.com/lua/lua puts sources at the repo root, not in src/.
+    "lua":       "lua.h",
 }
 
 

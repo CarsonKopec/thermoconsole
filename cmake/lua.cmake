@@ -12,11 +12,18 @@
 # we embed the library, we don't need the standalone interpreter.
 # ─────────────────────────────────────────────────────────────────────────────
 
-set(_LUA_SRC "${CMAKE_CURRENT_LIST_DIR}/../vendor/lua/src")
+# The github.com/lua/lua mirror puts sources at the repo root; the classic
+# lua.org tarballs put them under src/. Pick whichever layout is present.
+set(_LUA_ROOT "${CMAKE_CURRENT_LIST_DIR}/../vendor/lua")
+if(EXISTS "${_LUA_ROOT}/src/lua.h")
+    set(_LUA_SRC "${_LUA_ROOT}/src")
+elseif(EXISTS "${_LUA_ROOT}/lua.h")
+    set(_LUA_SRC "${_LUA_ROOT}")
+endif()
 
-if(NOT EXISTS "${_LUA_SRC}/lua.h")
+if(NOT _LUA_SRC OR NOT EXISTS "${_LUA_SRC}/lua.h")
     message(FATAL_ERROR
-        "Vendored Lua not found at ${_LUA_SRC}\n"
+        "Vendored Lua not found at ${_LUA_ROOT}\n"
         "Run:  python thermo.py setup")
 endif()
 
@@ -92,9 +99,9 @@ set(_LUA_VER_MINOR "${CMAKE_MATCH_1}")
 string(REGEX MATCH "LUA_VERSION_RELEASE[ \t]+\"([0-9]+)\"" _ "${_LUA_H}")
 set(_LUA_VER_RELEASE "${CMAKE_MATCH_1}")
 
-# Expose FindLua-compatible variables so the caller doesn't branch.
-# PARENT_SCOPE — we're included, not add_subdirectory'd.
-set(LUA_FOUND          TRUE                                            PARENT_SCOPE)
-set(LUA_INCLUDE_DIR    "${_LUA_SRC}"                                   PARENT_SCOPE)
-set(LUA_LIBRARIES      lua                                             PARENT_SCOPE)
-set(LUA_VERSION_STRING "${_LUA_VER_MAJOR}.${_LUA_VER_MINOR}.${_LUA_VER_RELEASE}" PARENT_SCOPE)
+# Expose FindLua-compatible variables to the caller. include() shares scope
+# with the caller, so a plain set() (no PARENT_SCOPE) is what we want.
+set(LUA_FOUND          TRUE)
+set(LUA_INCLUDE_DIR    "${_LUA_SRC}")
+set(LUA_LIBRARIES      lua)
+set(LUA_VERSION_STRING "${_LUA_VER_MAJOR}.${_LUA_VER_MINOR}.${_LUA_VER_RELEASE}")
