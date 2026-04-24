@@ -89,13 +89,49 @@ RUNTIME_DIR = ROOT / "runtime"
 SDK_DIR     = ROOT / "sdk"
 GAMES_DIR   = ROOT / "games"
 PICO_DIR    = ROOT / "pico-controller"
+VENDOR_DIR  = ROOT / "vendor"
 
-IMGUI_URL    = "https://github.com/ocornut/imgui"
-IMGUI_BRANCH = "docking"
-# Pin to a specific docking-branch release so `thermo setup` is reproducible
-# across machines. Override with `--imgui-ref`; bump this constant to update
-# the default. Fall back to bare branch HEAD if the ref doesn't exist remotely.
-IMGUI_REF    = "v1.91.9-docking"
+# ───────────────────────────────────────────────────────────────────────────
+# Vendored C/C++ dependencies
+# ───────────────────────────────────────────────────────────────────────────
+#
+# Pinned git refs so `thermo setup` is fully reproducible — same commit
+# everywhere, no vcpkg/brew/apt required. To bump a pin, edit `ref` below
+# and run `thermo setup --update-deps`. Each entry is cloned to vendor/<dir>.
+#
+# Fallback branches are used when the pinned ref doesn't resolve (typo,
+# offline, or the tag was moved) — better than failing outright.
+
+@dataclass
+class VendoredDep:
+    name: str             # display name
+    url: str              # git URL
+    ref: str              # tag / branch / SHA (pinned)
+    fallback_branch: str  # used when `ref` doesn't resolve
+    dir: str              # subdirectory under vendor/
+
+
+VENDORED_DEPS: list[VendoredDep] = [
+    VendoredDep("imgui",     "https://github.com/ocornut/imgui",        "v1.91.9-docking",   "docking",        "imgui"),
+    VendoredDep("SDL",       "https://github.com/libsdl-org/SDL",       "release-2.30.11",   "SDL2",           "SDL"),
+    VendoredDep("SDL_image", "https://github.com/libsdl-org/SDL_image", "release-2.8.3",     "SDL2",           "SDL_image"),
+    VendoredDep("SDL_mixer", "https://github.com/libsdl-org/SDL_mixer", "release-2.8.0",     "SDL2",           "SDL_mixer"),
+    VendoredDep("lua",       "https://github.com/lua/lua",              "v5.4.7",            "master",         "lua"),
+]
+
+
+def _dep(name: str) -> VendoredDep:
+    for d in VENDORED_DEPS:
+        if d.name == name:
+            return d
+    raise KeyError(name)
+
+
+# Legacy aliases — the old --imgui-ref flag still works and overrides the
+# imgui entry only. Everything else is controlled by editing VENDORED_DEPS.
+IMGUI_URL    = _dep("imgui").url
+IMGUI_BRANCH = _dep("imgui").fallback_branch
+IMGUI_REF    = _dep("imgui").ref
 
 IS_WINDOWS = sys.platform == "win32"
 IS_MACOS   = sys.platform == "darwin"
@@ -187,31 +223,63 @@ def check_deps() -> list[DepStatus]:
         hint="Install git from https://git-scm.com",
     ))
 
-    # SDL2 — try a real check first, fall back to "trust CMake" with guidance.
-    sdl_found, sdl_detail, sdl_hint = _check_sdl2()
-    results.append(DepStatus("SDL2 (dev)", sdl_found, detail=sdl_detail, hint=sdl_hint))
+    # SDL2 / SDL2_image / SDL2_mixer — prefer vendored sources under vendor/;
+    # fall back to "is it installed on the system?" so users with a
+    # pre-vcpkg/brew/apt setup still see a pass.
+    for dep_name, header in (
+        ("SDL",       "include/SDL.h"),
+        ("SDL_image", "SDL_image.h"),
+        ("SDL_mixer", "SDL_mixer.h"),
+    ):
+        dep = _dep(dep_name)
+        vend = VENDOR_DIR / dep.dir
+        if (vend / header).exists():
+            sha = _git_head_sha(vend) or "?"
+            results.append(DepStatus(
+                dep_name, True, detail=f"vendored at {sha[:10]}",
+                hint=f"python thermo.py setup  (pin: {dep.ref})"))
+        elif dep_name == "SDL":
+            # For bare SDL we can probe pkg-config / vcpkg as a fallback
+            found, detail, hint = _check_sdl2()
+            results.append(DepStatus("SDL (dev)", found,
+                                     detail=detail or "not vendored",
+                                     hint=hint or f"python thermo.py setup"))
+        else:
+            results.append(DepStatus(
+                dep_name, False, detail="not vendored",
+                hint=f"python thermo.py setup  (pin: {dep.ref})"))
 
-    # ImGui — vendored into editor/vendor/imgui, pinned to IMGUI_REF.
-    imgui_repo = EDITOR_DIR / "vendor" / "imgui"
+    # Lua — only needed by the runtime, but we still surface the status.
+    lua_dep = _dep("lua")
+    lua_vend = VENDOR_DIR / lua_dep.dir
+    if (lua_vend / "src" / "lua.h").exists():
+        sha = _git_head_sha(lua_vend) or "?"
+        results.append(DepStatus("lua", True, detail=f"vendored at {sha[:10]}",
+                                 hint=f"python thermo.py setup  (pin: {lua_dep.ref})"))
+    else:
+        results.append(DepStatus("lua", False, detail="not vendored",
+                                 hint=f"python thermo.py setup  (pin: {lua_dep.ref})"))
+
+    # ImGui — vendored into vendor/imgui, pinned to the imgui entry's ref.
+    imgui_dep = _dep("imgui")
+    imgui_repo = VENDOR_DIR / imgui_dep.dir
     imgui_header = imgui_repo / "imgui.h"
     branch = _git_current_branch(imgui_repo)
     sha    = _git_head_sha(imgui_repo)
     if imgui_header.exists():
         short_sha = sha[:10] if sha else "?"
         ref_label = branch if branch and branch != "HEAD" else short_sha
-        on_pin = branch == IMGUI_REF or (sha and sha.startswith(IMGUI_REF))
-        # Tolerate "on the docking branch" as a soft pass — users may have
-        # bumped past the pin intentionally during development.
-        acceptable = on_pin or branch == IMGUI_BRANCH
-        detail = f"at {ref_label}" + ("" if on_pin else f"  (pin: {IMGUI_REF})")
+        on_pin = branch == imgui_dep.ref or (sha and sha.startswith(imgui_dep.ref))
+        acceptable = on_pin or branch == imgui_dep.fallback_branch
+        detail = f"at {ref_label}" + ("" if on_pin else f"  (pin: {imgui_dep.ref})")
     else:
         acceptable = False
         detail = "not cloned"
     results.append(DepStatus(
-        "Dear ImGui (editor/vendor/imgui)",
+        "Dear ImGui (vendor/imgui)",
         acceptable,
         detail=detail,
-        hint=f"python thermo.py setup  (pins to '{IMGUI_REF}')",
+        hint=f"python thermo.py setup  (pins to '{imgui_dep.ref}')",
     ))
 
     return results
@@ -229,10 +297,14 @@ def _capture_version(cmd: Sequence[str]) -> str:
 def _check_sdl2() -> tuple[bool, str, str]:
     """Return (found, detail, hint) for SDL2+SDL2_image.
 
-    On Linux/macOS we trust `pkg-config`. On Windows we look for a vcpkg
-    installed manifest if VCPKG_ROOT is set. Everywhere else we fall through
-    to a soft "defer to CMake" signal.
+    Preferred path: vendored clone at vendor/SDL. Fallback: pkg-config
+    (Linux/Homebrew) or vcpkg (Windows).
     """
+    # Vendored sources win — that's what CMake prefers too.
+    if (VENDOR_DIR / "SDL" / "include" / "SDL.h").exists() and \
+       (VENDOR_DIR / "SDL_image" / "SDL_image.h").exists():
+        return True, "vendored (vendor/SDL, vendor/SDL_image)", ""
+
     # pkg-config covers Linux distros and Homebrew on macOS
     if have("pkg-config"):
         pkgs = ["sdl2", "SDL2_image"]
@@ -253,23 +325,8 @@ def _check_sdl2() -> tuple[bool, str, str]:
                     if (triplet / "include" / "SDL2" / "SDL.h").exists():
                         return True, f"vcpkg ({triplet.name})", ""
 
-    # Best-effort hint text per platform
-    if IS_LINUX:
-        mgr = detect_linux_pkg_mgr()
-        hints = {
-            "apt-get": "sudo apt-get install -y libsdl2-dev libsdl2-image-dev",
-            "dnf":     "sudo dnf install -y SDL2-devel SDL2_image-devel",
-            "pacman":  "sudo pacman -S sdl2 sdl2_image",
-            "zypper":  "sudo zypper install -y SDL2-devel SDL2_image-devel",
-        }
-        hint = hints.get(mgr or "", "install SDL2 and SDL2_image via your package manager")
-    elif IS_MACOS:
-        hint = "brew install sdl2 sdl2_image"
-    elif IS_WINDOWS:
-        hint = "vcpkg install sdl2 sdl2-image  (and set VCPKG_ROOT)"
-    else:
-        hint = "install SDL2 and SDL2_image dev packages"
-    return False, "not detected", hint
+    # Not found anywhere — point at the vendoring path first.
+    return False, "not detected", "python thermo.py setup  (clones SDL/SDL_image under vendor/)"
 
 
 def _git_current_branch(repo: Path) -> Optional[str]:
@@ -325,19 +382,23 @@ def install_system_deps(assume_yes: bool) -> None:
         ok("System deps installed via Homebrew.")
         return
 
-    # Windows
+    # Windows — vendored deps handle the C/C++ libraries. All the user
+    # needs is the MSVC toolchain, CMake, and Git, installed manually.
     if IS_WINDOWS:
-        warn("Automatic install on Windows requires vcpkg.")
-        print(
-            "    Recommended flow:\n"
-            "      1. git clone https://github.com/microsoft/vcpkg C:/vcpkg\n"
-            "      2. C:/vcpkg/bootstrap-vcpkg.bat\n"
-            "      3. C:/vcpkg/vcpkg install sdl2 sdl2-image\n"
-            "      4. set VCPKG_ROOT=C:/vcpkg  (or pass "
-            "-DCMAKE_TOOLCHAIN_FILE=... to CMake)\n"
-            "    CMake and Git are expected from https://cmake.org + "
-            "https://git-scm.com"
-        )
+        info("No package install needed — all C/C++ deps are vendored into "
+             "vendor/ by the next step.")
+        missing = [x for x in ("cmake", "git") if not have(x)]
+        if not any(have(c) for c in ("cl", "clang")):
+            missing.append("MSVC toolchain")
+        if missing:
+            warn(f"Still missing: {', '.join(missing)}")
+            print(
+                "    Install manually:\n"
+                "      - CMake:            https://cmake.org/download/\n"
+                "      - Git:              https://git-scm.com/\n"
+                "      - MSVC Build Tools: https://aka.ms/vs/17/release/vs_BuildTools.exe\n"
+                "                          (tick 'Desktop development with C++')"
+            )
         return
 
     warn(f"Unknown platform {sys.platform}; skipping system deps.")
@@ -349,80 +410,124 @@ def _git_head_sha(repo: Path) -> Optional[str]:
     return r.stdout.strip() if r.returncode == 0 else None
 
 
-def clone_or_update_imgui(ref: Optional[str] = None, update: bool = False) -> None:
-    """Ensure editor/vendor/imgui is checked out at `ref` (tag, branch, or SHA).
+def _clone_or_update_repo(dep: VendoredDep, ref_override: Optional[str],
+                          update: bool) -> None:
+    """Ensure `dep` is cloned into vendor/<dir> at `ref_override` (if given)
+    or `dep.ref`. Falls back to `dep.fallback_branch` when the pinned ref
+    doesn't resolve. Idempotent — safe to call on every setup."""
+    target_ref = ref_override or dep.ref
+    target     = VENDOR_DIR / dep.dir
 
-    Defaults to IMGUI_REF for reproducible builds. `--update-imgui` forces a
-    re-fetch even if the clone already matches, so you can bump the pin
-    temporarily without editing the file.
-    """
-    target_ref = ref or IMGUI_REF
-    step(f"Fetching Dear ImGui @ {target_ref}")
-
-    if not have("git"):
-        err("git is required. Install it and re-run.")
-        raise SystemExit(1)
-
-    vendor = EDITOR_DIR / "vendor"
-    target = vendor / "imgui"
-    vendor.mkdir(parents=True, exist_ok=True)
+    info(_c("1", f"  {dep.name}  @ {target_ref}"))
+    VENDOR_DIR.mkdir(parents=True, exist_ok=True)
 
     def _fresh_clone() -> None:
-        """Shallow-clone at target_ref, falling back to the docking branch
-        if the pinned ref doesn't exist (e.g. typo, tag moved, offline)."""
-        info(f"Cloning {IMGUI_URL} @ {target_ref} into {target.relative_to(ROOT)}")
+        if target.exists():
+            shutil.rmtree(target)
         r = subprocess.run(
-            ["git", "clone", "--depth", "1", "-b", target_ref, IMGUI_URL, str(target)],
+            ["git", "clone", "--depth", "1", "-b", target_ref,
+             dep.url, str(target)],
             check=False,
         )
         if r.returncode != 0:
-            warn(f"Ref '{target_ref}' not found; falling back to branch '{IMGUI_BRANCH}'.")
+            warn(f"    '{target_ref}' not found; falling back to '{dep.fallback_branch}'.")
             if target.exists():
                 shutil.rmtree(target)
-            run(["git", "clone", "--depth", "1", "-b", IMGUI_BRANCH,
-                 IMGUI_URL, str(target)])
-        sha = _git_head_sha(target)
-        ok(f"ImGui clone complete ({sha[:10] if sha else '?'}).")
+            run(["git", "clone", "--depth", "1", "-b", dep.fallback_branch,
+                 dep.url, str(target)])
+        sha = _git_head_sha(target) or "?"
+        ok(f"    {dep.name} {sha[:10]}")
 
     if not (target / ".git").exists():
         _fresh_clone()
         return
 
     current_branch = _git_current_branch(target)
-    current_sha    = _git_head_sha(target)
+    current_sha    = _git_head_sha(target) or ""
+    at_pin = current_branch == target_ref or current_sha.startswith(target_ref)
 
-    # Already at the pinned ref (by branch name or exact SHA) — nothing to do
-    # unless the caller asked for --update-imgui.
-    if not update and (current_branch == target_ref
-                       or (current_sha and current_sha.startswith(target_ref))):
-        ok(f"ImGui already at '{target_ref}' ({current_sha[:10] if current_sha else '?'}).")
+    if at_pin and not update:
+        ok(f"    {dep.name} already at {target_ref} ({current_sha[:10]})")
         return
 
-    # Try to move the existing clone to the target ref. Shallow clones don't
-    # carry arbitrary refs, so fetch the exact one and then check it out.
-    info(f"Moving existing clone from '{current_branch or current_sha}' to '{target_ref}'.")
+    # Shallow clones don't have arbitrary refs — fetch the exact one, then
+    # check it out. Re-clone on any failure so we don't leave a half-moved repo.
     fetched = subprocess.run(
         ["git", "-C", str(target), "fetch", "--depth", "1", "origin", target_ref],
         check=False,
     )
-    if fetched.returncode != 0:
-        warn("Fetch failed — removing and re-cloning.")
-        shutil.rmtree(target)
-        _fresh_clone()
-        return
+    if fetched.returncode == 0:
+        checkout = subprocess.run(
+            ["git", "-C", str(target), "checkout", "--detach", "FETCH_HEAD"],
+            check=False,
+        )
+        if checkout.returncode == 0:
+            sha = _git_head_sha(target) or "?"
+            ok(f"    {dep.name} → {target_ref} ({sha[:10]})")
+            return
 
-    checkout = subprocess.run(
-        ["git", "-C", str(target), "checkout", "--detach", "FETCH_HEAD"],
-        check=False,
-    )
-    if checkout.returncode != 0:
-        warn("Checkout failed — removing and re-cloning.")
-        shutil.rmtree(target)
-        _fresh_clone()
-        return
+    warn(f"    {dep.name} fetch/checkout failed — re-cloning.")
+    _fresh_clone()
 
-    sha = _git_head_sha(target)
-    ok(f"ImGui now at '{target_ref}' ({sha[:10] if sha else '?'}).")
+
+def clone_or_update_vendored_deps(
+    imgui_ref: Optional[str] = None,
+    update: bool = False,
+    only: Optional[Iterable[str]] = None,
+) -> None:
+    """Clone (or update) every vendored dep into vendor/. Idempotent.
+
+    `imgui_ref` overrides the imgui pin (legacy --imgui-ref flag).
+    `only` restricts to a subset of dep names.
+    `update` forces re-fetch even if already at the pin.
+    """
+    if not have("git"):
+        err("git is required. Install it and re-run.")
+        raise SystemExit(1)
+
+    # One-time migration: old layout had editor/vendor/imgui; new layout is
+    # vendor/imgui at repo root. Clean up the old path so it doesn't shadow.
+    legacy_imgui = EDITOR_DIR / "vendor" / "imgui"
+    if legacy_imgui.exists():
+        warn(f"Removing legacy {legacy_imgui.relative_to(ROOT)} (now at vendor/imgui)")
+        shutil.rmtree(legacy_imgui)
+        legacy_parent = EDITOR_DIR / "vendor"
+        try:
+            legacy_parent.rmdir()  # only succeeds if empty
+        except OSError:
+            pass
+
+    step(f"Fetching vendored dependencies into {VENDOR_DIR.relative_to(ROOT)}/")
+    only_set = set(only) if only else None
+    for dep in VENDORED_DEPS:
+        if only_set and dep.name not in only_set:
+            continue
+        override = imgui_ref if dep.name == "imgui" else None
+        _clone_or_update_repo(dep, override, update)
+
+
+# Back-compat shim — old callers (and the --imgui-ref setup flag) land here.
+def clone_or_update_imgui(ref: Optional[str] = None, update: bool = False) -> None:
+    clone_or_update_vendored_deps(imgui_ref=ref, update=update, only=["imgui"])
+
+
+# Header files we probe to decide if a vendored dep is "present enough" to
+# skip fetching. These are paths under vendor/<dir>/.
+_VENDOR_PROBES: dict[str, str] = {
+    "imgui":     "imgui.h",
+    "SDL":       "include/SDL.h",
+    "SDL_image": "SDL_image.h",
+    "SDL_mixer": "SDL_mixer.h",
+    "lua":       "src/lua.h",
+}
+
+
+def _vendor_dep_present(name: str) -> bool:
+    dep = _dep(name)
+    probe = _VENDOR_PROBES.get(name)
+    if not probe:
+        return (VENDOR_DIR / dep.dir / ".git").exists()
+    return (VENDOR_DIR / dep.dir / probe).exists()
 
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -434,6 +539,9 @@ class BuildTarget:
     name: str
     source_dir: Path
     build_dir: Path
+    # Names from VENDORED_DEPS that must be present before building.
+    # If any are missing, `thermo build` auto-fetches them.
+    vendor_deps: list[str] = field(default_factory=list)
     requires_imgui: bool = False
     requires_pico_sdk: bool = False
     # Opt-in targets aren't built by `thermo build all` — the pico firmware
@@ -447,11 +555,13 @@ TARGETS: dict[str, BuildTarget] = {
         name="runtime",
         source_dir=RUNTIME_DIR,
         build_dir=RUNTIME_DIR / "build",
+        vendor_deps=["SDL", "SDL_image", "SDL_mixer", "lua"],
     ),
     "editor": BuildTarget(
         name="editor",
         source_dir=EDITOR_DIR,
         build_dir=EDITOR_DIR / "build",
+        vendor_deps=["imgui", "SDL", "SDL_image"],
         requires_imgui=True,
     ),
     "pico": BuildTarget(
@@ -494,9 +604,12 @@ def build_target(name: str, *, debug: bool, clean: bool, jobs: Optional[int]) ->
         err("CMake not found. Run: python thermo.py setup")
         raise SystemExit(1)
 
-    if t.requires_imgui and not (EDITOR_DIR / "vendor" / "imgui" / "imgui.h").exists():
-        warn("ImGui missing; fetching it now.")
-        clone_or_update_imgui()
+    # Auto-fetch any vendored deps the target declares as required.
+    # Cheap if already present (just probes a header file).
+    missing = [n for n in t.vendor_deps if not _vendor_dep_present(n)]
+    if missing:
+        warn(f"Vendored deps missing: {', '.join(missing)}. Fetching now.")
+        clone_or_update_vendored_deps(only=missing)
 
     if t.requires_pico_sdk and not os.environ.get("PICO_SDK_PATH"):
         err("PICO_SDK_PATH is not set. The pico firmware needs the Raspberry "
@@ -817,16 +930,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = p.add_subparsers(dest="command", required=True, metavar="command")
 
-    ps = sub.add_parser("setup", help="Install deps and clone ImGui.")
+    ps = sub.add_parser("setup", help="Install deps and clone vendored libraries into vendor/.")
     ps.add_argument("--yes", "-y", action="store_true",
                     help="Skip interactive confirmations during package install.")
     ps.add_argument("--skip-system", action="store_true",
-                    help="Skip OS package installation (ImGui only).")
+                    help="Skip OS package installation (vendor/ only — no sudo needed).")
+    ps.add_argument("--only", metavar="NAME", action="append",
+                    choices=[d.name for d in VENDORED_DEPS],
+                    help="Fetch only the named vendored dep. Repeat for multiple.")
     ps.add_argument("--imgui-ref", metavar="REF",
                     help=f"Override the ImGui pin (default: {IMGUI_REF}). "
                          "Tag, branch, or SHA.")
+    ps.add_argument("--update-deps", action="store_true",
+                    help="Force re-fetch of every vendored dep, even if already "
+                         "at its pin. Use this after editing a ref in the file.")
+    # Legacy alias — preserved so old muscle memory still works.
     ps.add_argument("--update-imgui", action="store_true",
-                    help="Force re-fetch of ImGui even if already at the pin.")
+                    help=argparse.SUPPRESS)
 
     build_choices = ["all"] + list(TARGETS)
     pb = sub.add_parser("build", help="Build runtime, editor, pico, or all.")
@@ -877,7 +997,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         if args.command == "setup":
             if not args.skip_system:
                 install_system_deps(assume_yes=args.yes)
-            clone_or_update_imgui(ref=args.imgui_ref, update=args.update_imgui)
+            clone_or_update_vendored_deps(
+                imgui_ref=args.imgui_ref,
+                update=args.update_deps or args.update_imgui,
+                only=args.only,
+            )
             ok("Setup complete. Try: python thermo.py build")
             return 0
 

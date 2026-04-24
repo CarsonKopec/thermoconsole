@@ -4,7 +4,8 @@ build-debug/
 dist/
 
 # Vendored dependencies (pulled by thermo.py setup)
-editor/vendor/
+vendor/
+editor/vendor/   # legacy path, kept so old checkouts stay clean
 
 # Python
 __pycache__/

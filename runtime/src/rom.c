@@ -12,9 +12,20 @@
 
 #ifdef _WIN32
 #include <direct.h>
+#include <process.h>        /* _getpid */
 #include <windows.h>
 #define mkdir(path, mode) _mkdir(path)
 #define PATH_SEP '\\'
+/* MSVC's CRT uses _-prefixed names for these POSIX functions. Map them
+ * back so the rest of the file can call the portable spellings. */
+#define strdup _strdup
+#define getpid _getpid
+#ifndef S_ISDIR
+#define S_ISDIR(m) (((m) & _S_IFMT) == _S_IFDIR)
+#endif
+#ifndef S_ISREG
+#define S_ISREG(m) (((m) & _S_IFMT) == _S_IFREG)
+#endif
 #else
 #include <unistd.h>
 #include <dirent.h>

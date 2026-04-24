@@ -26,56 +26,101 @@ endif()
 # Dependencies
 # ─────────────────────────────────────────────────────────────────────────────
 #
-# Windows (vcpkg):
-#   vcpkg install sdl2 sdl2-image sdl2-mixer lua
-#   cmake .. -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
+# Preferred path: every C/C++ dep is vendored under <repo>/vendor/ as a pinned
+# git clone (see thermo.py setup). When vendored sources are present we build
+# SDL / SDL_image / SDL_mixer / Lua from source — no vcpkg / brew / apt needed.
 #
-# Linux:
-#   apt install libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev liblua5.4-dev
-#
-# Mac:
-#   brew install sdl2 sdl2_image sdl2_mixer lua
+# If vendor/ is empty we fall back to find_package CONFIG → pkg-config, so
+# distro-package installs still work.
 
-# ── SDL2 ──────────────────────────────────────────────────────────────────────
+set(_VENDOR_DIR ${CMAKE_SOURCE_DIR}/../vendor)
 
-find_package(SDL2       CONFIG QUIET)
-find_package(SDL2_image CONFIG QUIET)
-find_package(SDL2_mixer CONFIG QUIET)
+# ── SDL2 / SDL2_image / SDL2_mixer ────────────────────────────────────────────
 
-if(NOT SDL2_FOUND AND NOT TARGET SDL2::SDL2 AND NOT TARGET SDL2::SDL2-static)
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(SDL2       REQUIRED sdl2)
-    pkg_check_modules(SDL2_IMAGE REQUIRED SDL2_image)
-    pkg_check_modules(SDL2_MIXER REQUIRED SDL2_mixer)
-    set(_USE_PKGCONFIG TRUE)
+set(_SDL_VENDORED FALSE)
+
+if(EXISTS ${_VENDOR_DIR}/SDL/include/SDL.h AND
+   EXISTS ${_VENDOR_DIR}/SDL_image/SDL_image.h AND
+   EXISTS ${_VENDOR_DIR}/SDL_mixer/include/SDL_mixer.h)
+    # Build all three SDL libs from vendored sources. Static link, no tests,
+    # only format/codec loaders we actually use (PNG for SDL_image; OGG/WAV
+    # for SDL_mixer) so we don't drag libjpeg/libwebp/libflac into the build.
+    set(SDL_SHARED         OFF CACHE BOOL "" FORCE)
+    set(SDL_STATIC         ON  CACHE BOOL "" FORCE)
+    set(SDL_TEST           OFF CACHE BOOL "" FORCE)
+
+    set(SDL2IMAGE_INSTALL  OFF CACHE BOOL "" FORCE)
+    set(SDL2IMAGE_SAMPLES  OFF CACHE BOOL "" FORCE)
+    set(SDL2IMAGE_PNG      ON  CACHE BOOL "" FORCE)
+    set(SDL2IMAGE_JPG      OFF CACHE BOOL "" FORCE)
+    set(SDL2IMAGE_WEBP     OFF CACHE BOOL "" FORCE)
+    set(SDL2IMAGE_AVIF     OFF CACHE BOOL "" FORCE)
+    set(SDL2IMAGE_TIF      OFF CACHE BOOL "" FORCE)
+    set(SDL2IMAGE_BMP      ON  CACHE BOOL "" FORCE)
+
+    set(SDL2MIXER_INSTALL  OFF CACHE BOOL "" FORCE)
+    set(SDL2MIXER_SAMPLES  OFF CACHE BOOL "" FORCE)
+    set(SDL2MIXER_FLAC     OFF CACHE BOOL "" FORCE)
+    set(SDL2MIXER_MOD      OFF CACHE BOOL "" FORCE)
+    set(SDL2MIXER_MP3      OFF CACHE BOOL "" FORCE)
+    set(SDL2MIXER_MIDI     OFF CACHE BOOL "" FORCE)
+    set(SDL2MIXER_OPUS     OFF CACHE BOOL "" FORCE)
+    set(SDL2MIXER_WAVPACK  OFF CACHE BOOL "" FORCE)
+    set(SDL2MIXER_OGG      ON  CACHE BOOL "" FORCE)
+    set(SDL2MIXER_WAV      ON  CACHE BOOL "" FORCE)
+
+    add_subdirectory(${_VENDOR_DIR}/SDL
+        ${CMAKE_BINARY_DIR}/_vendor_sdl       EXCLUDE_FROM_ALL)
+    add_subdirectory(${_VENDOR_DIR}/SDL_image
+        ${CMAKE_BINARY_DIR}/_vendor_sdl_image EXCLUDE_FROM_ALL)
+    add_subdirectory(${_VENDOR_DIR}/SDL_mixer
+        ${CMAKE_BINARY_DIR}/_vendor_sdl_mixer EXCLUDE_FROM_ALL)
+    set(_SDL_VENDORED TRUE)
+else()
+    find_package(SDL2       CONFIG QUIET)
+    find_package(SDL2_image CONFIG QUIET)
+    find_package(SDL2_mixer CONFIG QUIET)
+
+    if(NOT SDL2_FOUND AND NOT TARGET SDL2::SDL2 AND NOT TARGET SDL2::SDL2-static)
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(SDL2       REQUIRED sdl2)
+        pkg_check_modules(SDL2_IMAGE REQUIRED SDL2_image)
+        pkg_check_modules(SDL2_MIXER REQUIRED SDL2_mixer)
+        set(_USE_PKGCONFIG TRUE)
+    endif()
 endif()
 
 # ── Lua ───────────────────────────────────────────────────────────────────────
-# CMake's built-in FindLua works on all platforms (Windows, Linux, Mac).
-# We ask for 5.4; it also finds 5.3 as a fallback if 5.4 isn't available.
+# Prefer the vendored Lua sources (cmake/lua.cmake builds them as a STATIC
+# target called `lua` and exports FindLua-compatible variables). Otherwise
+# fall back to CMake's built-in FindLua → pkg-config.
 
-find_package(Lua 5.4 QUIET)
-if(NOT LUA_FOUND)
-    find_package(Lua QUIET)   # any version
-endif()
+set(_LUA_VENDORED FALSE)
 
-if(NOT LUA_FOUND)
-    if(_USE_PKGCONFIG OR (NOT WIN32))
-        # Already have PkgConfig, or on a Unix system — try it
-        if(NOT COMMAND pkg_check_modules)
-            find_package(PkgConfig REQUIRED)
+if(EXISTS ${_VENDOR_DIR}/lua/src/lua.h)
+    include(${CMAKE_SOURCE_DIR}/../cmake/lua.cmake)
+    set(_LUA_VENDORED TRUE)
+else()
+    find_package(Lua 5.4 QUIET)
+    if(NOT LUA_FOUND)
+        find_package(Lua QUIET)   # any version
+    endif()
+
+    if(NOT LUA_FOUND)
+        if(_USE_PKGCONFIG OR (NOT WIN32))
+            if(NOT COMMAND pkg_check_modules)
+                find_package(PkgConfig REQUIRED)
+            endif()
+            pkg_check_modules(LUA REQUIRED lua5.4)
+            set(LUA_INCLUDE_DIR  ${LUA_INCLUDE_DIRS})
+            set(LUA_LIBRARIES    ${LUA_LIBRARIES})
+            set(LUA_FOUND TRUE)
+        else()
+            message(FATAL_ERROR
+"Lua 5.4 not found and vendored sources are missing.
+  Run:  python thermo.py setup
+  (or install liblua5.4-dev / brew install lua)")
         endif()
-        pkg_check_modules(LUA REQUIRED lua5.4)
-        set(LUA_INCLUDE_DIR  ${LUA_INCLUDE_DIRS})
-        set(LUA_LIBRARIES    ${LUA_LIBRARIES})
-        set(LUA_FOUND TRUE)
-    else()
-        message(FATAL_ERROR
-"Lua 5.4 not found.
-  Windows:  vcpkg install lua
-            then add -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake
-  Linux:    apt install liblua5.4-dev
-  Mac:      brew install lua")
     endif()
 endif()
 
@@ -97,8 +142,15 @@ set(THERMO_SOURCES
     src/rom.c
     src/lua_api.c
     src/script.c
-    src/system_api.c
 )
+
+# system_api.c is the hardware system menu — it uses dirent.h, unlink/symlink,
+# /sys/class/thermal, /home/pi paths, and amixer. It only makes sense on the
+# actual Pi console, so skip it on Windows/Mac desktop builds. Nothing else
+# in the runtime currently calls into it, so excluding it doesn't break links.
+if(UNIX)
+    list(APPEND THERMO_SOURCES src/system_api.c)
+endif()
 
 if(THERMO_PICO_USB)
     message(STATUS "Audio: Pico via USB serial (sound + buttons)")
@@ -190,23 +242,19 @@ if(MSVC)
     target_compile_definitions(thermoconsole PRIVATE _CRT_SECURE_NO_WARNINGS)
     set_target_properties(thermoconsole PROPERTIES LINK_FLAGS "/SUBSYSTEM:CONSOLE")
 
-    # Copy SDL2 / SDL2_image / SDL2_mixer / Lua DLLs next to exe after build
-    set(_VCPKG_BIN "${CMAKE_SOURCE_DIR}/../../vcpkg/installed/x64-windows/bin")
-    if(EXISTS "${_VCPKG_BIN}")
-        foreach(_dll SDL2 SDL2_image SDL2_mixer lua54)
-            set(_src "${_VCPKG_BIN}/${_dll}.dll")
-            if(EXISTS "${_src}")
+    # Vendored builds are static — nothing to copy. For a non-vendored CONFIG
+    # build (e.g. a pre-installed SDL2 with DLLs), copy the runtime DLLs next
+    # to the exe so double-click launch works.
+    if(NOT _SDL_VENDORED)
+        foreach(_tgt SDL2::SDL2 SDL2_image::SDL2_image SDL2_mixer::SDL2_mixer)
+            if(TARGET ${_tgt})
                 add_custom_command(TARGET thermoconsole POST_BUILD
                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                        "${_src}" "$<TARGET_FILE_DIR:thermoconsole>"
-                    COMMENT "Copying ${_dll}.dll"
+                        "$<TARGET_FILE:${_tgt}>" "$<TARGET_FILE_DIR:thermoconsole>"
+                    COMMENT "Copying $<TARGET_FILE_NAME:${_tgt}>"
                 )
             endif()
         endforeach()
-    else()
-        message(STATUS
-            "DLL auto-copy skipped — copy SDL2.dll, SDL2_image.dll, "
-            "SDL2_mixer.dll, lua54.dll next to thermoconsole.exe manually.")
     endif()
 else()
     target_compile_options(thermoconsole PRIVATE
@@ -223,11 +271,26 @@ install(TARGETS thermoconsole RUNTIME DESTINATION bin)
 # Summary
 # ─────────────────────────────────────────────────────────────────────────────
 
+if(_SDL_VENDORED)
+    set(_SDL_MODE "vendored (static)")
+elseif(_USE_PKGCONFIG)
+    set(_SDL_MODE "pkg-config")
+else()
+    set(_SDL_MODE "find_package CONFIG")
+endif()
+
+if(_LUA_VENDORED)
+    set(_LUA_MODE "vendored (${LUA_VERSION_STRING})")
+else()
+    set(_LUA_MODE "system (${LUA_VERSION_STRING})")
+endif()
+
 message(STATUS "")
 message(STATUS "ThermoConsole Runtime Configuration:")
 message(STATUS "  Version:     ${PROJECT_VERSION}")
 message(STATUS "  Build Type:  ${CMAKE_BUILD_TYPE}")
 message(STATUS "  Platform:    ${CMAKE_SYSTEM_NAME}")
 message(STATUS "  Compiler:    ${CMAKE_C_COMPILER_ID}")
-message(STATUS "  Lua:         ${LUA_VERSION_STRING}")
+message(STATUS "  SDL:         ${_SDL_MODE}")
+message(STATUS "  Lua:         ${_LUA_MODE}")
 message(STATUS "")
