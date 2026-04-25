@@ -201,6 +201,10 @@ bool ThermoEditor::init() {
     // own OS windows (a different monitor, off-screen, etc.). This is the
     // whole reason we're on the GL backend — SDL_Renderer2 didn't support it.
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+    // Give popped-out windows a real OS title bar (minimize / maximize /
+    // close, native drag + resize) instead of ImGui's internal title bar
+    // which only has the close X.
+    io.ConfigViewportsNoDecoration = false;
 
     // Nice-to-have docking behaviour:
     //   - tabs next to a docked window's title keep the window visible
