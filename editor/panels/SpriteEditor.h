@@ -45,8 +45,8 @@ private:
     std::vector<uint8_t> m_pixels;
     bool                 m_sheetDirty = false;
 
-    // SDL texture
-    SDL_Texture* m_sheetTex = nullptr;
+    // GL texture (uint to avoid pulling <GL/gl.h> into this header)
+    unsigned int m_sheetTex = 0;
     bool         m_texDirty = true;
 
     // Selection / tools

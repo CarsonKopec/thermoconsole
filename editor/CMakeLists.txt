@@ -40,7 +40,9 @@ set(IMGUI_SOURCES
     ${IMGUI_DIR}/imgui_widgets.cpp
     ${IMGUI_DIR}/imgui_demo.cpp
     ${IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
-    ${IMGUI_DIR}/backends/imgui_impl_sdlrenderer2.cpp
+    # OpenGL3 backend — needed for multi-viewport (OS-level tear-off windows).
+    # SDL_Renderer2 backend does not support viewports.
+    ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
 )
 
 # ─── SDL2 + SDL2_image ────────────────────────────────────────────────────────
@@ -131,6 +133,15 @@ else()
         )
     endif()
 endif()
+
+# ─── OpenGL ──────────────────────────────────────────────────────────────────
+# Used by the imgui_impl_opengl3 backend. Function loading is handled by
+# imgui_impl_opengl3_loader.h (vendored inside ImGui itself), so we only need
+# to link the system GL library here.
+
+set(OpenGL_GL_PREFERENCE GLVND)
+find_package(OpenGL REQUIRED)
+target_link_libraries(thermo_editor PRIVATE OpenGL::GL)
 
 # ─── Platform flags ───────────────────────────────────────────────────────────
 
