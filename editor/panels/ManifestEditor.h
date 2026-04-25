@@ -34,4 +34,15 @@ private:
 
     void syncFromManifest();
     void syncToManifest();
+
+    // External-file watcher: poll manifest.json's mtime each frame; if it
+    // changed under us (e.g. another editor, git pull), prompt the user to
+    // reload — or auto-reload silently when there are no local edits.
+    fs::file_time_type m_lastDiskMtime {};
+    bool               m_reloadPromptOpen = false;
+
+    void captureDiskMtime();          // refresh m_lastDiskMtime from disk
+    bool buffersDirty() const;        // any local edit not yet saved?
+    void pollManifestOnDisk();        // call once per frame
+    void drawReloadPrompt();
 };

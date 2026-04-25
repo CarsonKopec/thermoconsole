@@ -189,7 +189,16 @@ void SpriteEditor::endStroke() {
 
 void SpriteEditor::pushUndoSnapshot(const std::vector<uint8_t>& before) {
     m_undoStack.push_back(before);
-    if (m_undoStack.size() > kMaxUndo) m_undoStack.erase(m_undoStack.begin());
+    if (m_undoStack.size() > kMaxUndo) {
+        m_undoStack.erase(m_undoStack.begin());
+        if (!m_undoCapWarned) {
+            m_editor->log("Sprite undo history hit its cap ("
+                          + std::to_string(kMaxUndo)
+                          + " snapshots). Oldest edits will be discarded "
+                            "as you keep painting.");
+            m_undoCapWarned = true;
+        }
+    }
     m_redoStack.clear();
 }
 

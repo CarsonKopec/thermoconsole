@@ -57,7 +57,20 @@ void GamePreview::draw() {
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, {0.90f, 0.25f, 0.25f, 1.f});
         if (ImGui::Button("  \xE2\x96\xA0  Stop  ")) stopGame();
         ImGui::PopStyleColor(2);
+
+        ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_Button,        {0.25f, 0.45f, 0.85f, 1.f});
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, {0.35f, 0.60f, 1.00f, 1.f});
+        if (ImGui::Button("  \xE2\x86\xBB  Reload  ")) reload();   // ↻
+        ImGui::PopStyleColor(2);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Stop and relaunch with the current sources");
     }
+
+    ImGui::SameLine(0, 16);
+    ImGui::Checkbox("Auto-reload on save", &m_autoReloadOnSave);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Ctrl+S in the code editor relaunches the game");
 
     ImGui::SameLine(0, 16);
 
@@ -110,11 +123,39 @@ void GamePreview::drawRunningDisplay() {
     const float t = static_cast<float>(SDL_GetTicks()) / 500.f;
     const float pulse = 0.5f + 0.5f * std::sin(t * 3.14159f);
 
+    // Heartbeat: how long since the runtime last emitted output. A silent
+    // game looks indistinguishable from a hung one without this hint.
+    const uint64_t lastTick = m_lastOutputTick.load(std::memory_order_relaxed);
+    const uint64_t nowTick  = SDL_GetTicks64();
+    const float quietSec    = lastTick == 0
+        ? -1.f
+        : (float)(nowTick - lastTick) / 1000.f;
+
+    // Color the dot: green = recent (<2s), amber = quiet (2–10s), red = stale.
+    ImVec4 dotColor = {0.2f + pulse * 0.5f, 0.8f, 0.2f, 1.f};
+    const char* statusSuffix = "";
+    if (quietSec >= 0.f && quietSec > 10.f) {
+        dotColor = {0.95f, 0.30f, 0.30f, 1.f};
+        statusSuffix = "  (no output)";
+    } else if (quietSec >= 0.f && quietSec > 2.f) {
+        dotColor = {0.95f, 0.75f, 0.20f, 1.f};
+    }
+
     const char* msg = "\xE2\x97\x8F Game Running...";   // ● prefix
     ImVec2 ts = ImGui::CalcTextSize(msg);
     ImGui::SetCursorPosY(avail.y * 0.4f);
     ImGui::SetCursorPosX((avail.x - ts.x) * 0.5f);
-    ImGui::TextColored({0.2f + pulse * 0.5f, 0.8f, 0.2f, 1.f}, "%s", msg);
+    ImGui::TextColored(dotColor, "%s%s", msg, statusSuffix);
+
+    // Sub-line: timestamp of last output (or "waiting for first output...")
+    char hb[64];
+    if (quietSec < 0.f)        std::snprintf(hb, sizeof(hb), "waiting for first output...");
+    else if (quietSec < 1.f)   std::snprintf(hb, sizeof(hb), "last output: just now");
+    else if (quietSec < 60.f)  std::snprintf(hb, sizeof(hb), "last output: %.1fs ago", quietSec);
+    else                       std::snprintf(hb, sizeof(hb), "last output: %.0fs ago", quietSec);
+    ImVec2 hts = ImGui::CalcTextSize(hb);
+    ImGui::SetCursorPosX((avail.x - hts.x) * 0.5f);
+    ImGui::TextDisabled("%s", hb);
 
     // Show last few lines of output
     ImGui::SetCursorPosY(avail.y * 0.55f);
@@ -187,6 +228,7 @@ void GamePreview::launchGame() {
         return;
     }
 
+    m_lastOutputTick.store(0, std::memory_order_relaxed);
     startProcess(m_editor->runtimeBinary, m_projectPath.string());
 }
 
@@ -196,6 +238,18 @@ void GamePreview::stopGame() {
         m_shutdown.store(true);
         killProcessLocked();
     }
+}
+
+void GamePreview::reload() {
+    if (!m_running.load()) return;          // nothing to restart
+    m_editor->log("Reloading game...");
+    stopGame();
+    joinAndReset();
+    launchGame();
+}
+
+void GamePreview::onSourceSaved() {
+    if (m_autoReloadOnSave && m_running.load()) reload();
 }
 
 void GamePreview::joinAndReset() {
@@ -435,6 +489,7 @@ void GamePreview::appendOutput(const char* text, size_t n) {
         }
         pos = nl + 1;
     }
+    m_lastOutputTick.store(SDL_GetTicks64(), std::memory_order_relaxed);
 }
 
 void GamePreview::drainOutput() {
