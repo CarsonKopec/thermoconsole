@@ -4,6 +4,7 @@
 
 #include "SpriteEditor.h"
 #include <SDL_image.h>
+#include <SDL_opengl.h>   // glGenTextures/glTexImage2D — all GL 1.1, in gl.h
 
 #include <algorithm>
 #include <climits>
@@ -46,45 +47,56 @@ void SpriteEditor::onProjectOpened(const fs::path& projectPath) {
     m_texDirty   = true;
 }
 
-// ─── SDL texture management ─────────────────────────────────────────────────
+// ─── GL texture management ──────────────────────────────────────────────────
+//
+// We back the sprite preview with a single 256×256 RGBA8 GL texture, regenerated
+// from m_pixels whenever the sheet changes. ImGui::Image accepts the GL texture
+// name (cast through ImTextureID) directly — the OpenGL3 backend interprets it
+// as a GLuint.
 
 void SpriteEditor::freeTextures() {
     if (m_sheetTex) {
-        SDL_DestroyTexture(m_sheetTex);
-        m_sheetTex = nullptr;
+        GLuint t = m_sheetTex;
+        glDeleteTextures(1, &t);
+        m_sheetTex = 0;
     }
 }
 
 void SpriteEditor::rebuildTexture() {
     if (!m_texDirty) return;
-    freeTextures();
 
-    SDL_Renderer* rend = m_editor->renderer();
-    m_sheetTex = SDL_CreateTexture(rend, SDL_PIXELFORMAT_RGBA8888,
-                                   SDL_TEXTUREACCESS_STREAMING, kSize, kSize);
-    if (!m_sheetTex) return;
-
-    // Enable alpha blending so transparent pixels let the canvas background through
-    SDL_SetTextureBlendMode(m_sheetTex, SDL_BLENDMODE_BLEND);
-
-    void* pixels = nullptr;
-    int   pitch  = 0;
-    if (SDL_LockTexture(m_sheetTex, nullptr, &pixels, &pitch) != 0) return;
-
-    auto* dst = static_cast<uint32_t*>(pixels);
-    const int stride = pitch / 4;
+    // Pack m_pixels into byte-order RGBA. (GL_UNSIGNED_BYTE + GL_RGBA expects
+    // bytes laid out as R,G,B,A — endian-independent, unlike SDL's pixel formats.)
+    std::vector<uint8_t> rgba(static_cast<size_t>(kSize) * kSize * 4);
     for (int y = 0; y < kSize; ++y) {
         for (int x = 0; x < kSize; ++x) {
             const uint8_t idx = m_pixels[y * kSize + x] & 0x0F;
             const auto& c = THERMO_PALETTE[idx];
-            const uint32_t alpha = (idx == 0) ? 0u : 0xFFu;   // index 0 = transparent
-            dst[y * stride + x] = (uint32_t(c.r) << 24) |
-                                  (uint32_t(c.g) << 16) |
-                                  (uint32_t(c.b) <<  8) |
-                                   alpha;
+            uint8_t* dst = &rgba[(y * kSize + x) * 4];
+            dst[0] = c.r;
+            dst[1] = c.g;
+            dst[2] = c.b;
+            dst[3] = (idx == 0) ? 0 : 0xFF;   // index 0 = transparent
         }
     }
-    SDL_UnlockTexture(m_sheetTex);
+
+    if (!m_sheetTex) {
+        GLuint t = 0;
+        glGenTextures(1, &t);
+        m_sheetTex = t;
+        glBindTexture(GL_TEXTURE_2D, m_sheetTex);
+        // Pixel art — never blur on zoom.
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, kSize, kSize, 0,
+                     GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+    } else {
+        glBindTexture(GL_TEXTURE_2D, m_sheetTex);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, kSize, kSize,
+                        GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+    }
     m_texDirty = false;
 }
 

@@ -96,10 +96,11 @@ uses the Dear ImGui **docking** branch.
 ### Setup notes
 - `setup.sh` now clones the `docking` branch and will rewire an existing
   `vendor/imgui` clone that was on `master`.
-- The `SDL_Renderer2` backend is kept, which means torn-off panels are
-  floating ImGui windows *inside* the editor window (they can be moved
-  anywhere within it). A future release may swap the backend to OpenGL3
-  to enable true OS-level multi-viewports.
+- The renderer backend is now `imgui_impl_opengl3` (was `SDL_Renderer2`).
+  This unlocks `ImGuiConfigFlags_ViewportsEnable` — torn-off panels become
+  their own OS windows that can be dragged onto a second monitor or
+  off-screen. The window is created with `SDL_WINDOW_OPENGL` and a 3.3
+  core context.
 
 ## What changed in 1.0.1
 

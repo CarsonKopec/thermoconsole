@@ -9,7 +9,7 @@
 #include <SDL_image.h>
 #include <imgui.h>
 #include <imgui_impl_sdl2.h>
-#include <imgui_impl_sdlrenderer2.h>
+#include <imgui_impl_opengl3.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -112,8 +112,8 @@ public:
     void notifySourceSaved();
 
     // SDL accessors
-    SDL_Renderer* renderer() { return m_renderer; }
-    SDL_Window*   window()   { return m_window;   }
+    SDL_Window*   window()    { return m_window;    }
+    SDL_GLContext glContext() { return m_glContext; }
 
     // Runtime binary path (auto-detected next to editor or user-configurable)
     std::string runtimeBinary;
@@ -122,10 +122,10 @@ public:
     void requestOpenDialog() { m_wantOpenDialog = true; }
 
 private:
-    // SDL / ImGui
-    SDL_Window*   m_window   = nullptr;
-    SDL_Renderer* m_renderer = nullptr;
-    bool          m_running  = false;
+    // SDL / ImGui — using OpenGL backend so multi-viewport works.
+    SDL_Window*   m_window    = nullptr;
+    SDL_GLContext m_glContext = nullptr;
+    bool          m_running   = false;
 
     // Project state
     fs::path     m_projectPath;

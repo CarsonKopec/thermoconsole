@@ -12,6 +12,7 @@
 #include "panels/SpriteEditor.h"
 
 #include <imgui_internal.h>   // DockBuilder* — docking branch only
+#include <SDL_opengl.h>       // gl.h prototypes (glViewport/glClear/glClearColor)
 
 #include <algorithm>
 #include <cctype>
@@ -159,34 +160,48 @@ bool ThermoEditor::init() {
         return false;
     }
 
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
+    // Request a GL 3.3 core context. ImGui's OpenGL3 backend works with 3.0+;
+    // 3.3 is widely supported and lets us use #version 330 GLSL.
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS,         0);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,  SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,          1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,            24);
+    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE,          8);
 
     m_window = SDL_CreateWindow(
         "ThermoConsole Editor",
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         1400, 900,
-        SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+        SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI |
+        SDL_WINDOW_OPENGL);
     if (!m_window) {
         std::fprintf(stderr, "SDL_CreateWindow error: %s\n", SDL_GetError());
         IMG_Quit(); SDL_Quit();
         return false;
     }
 
-    m_renderer = SDL_CreateRenderer(
-        m_window, -1,
-        SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_ACCELERATED);
-    if (!m_renderer) {
-        std::fprintf(stderr, "SDL_CreateRenderer error: %s\n", SDL_GetError());
+    m_glContext = SDL_GL_CreateContext(m_window);
+    if (!m_glContext) {
+        std::fprintf(stderr, "SDL_GL_CreateContext error: %s\n", SDL_GetError());
         SDL_DestroyWindow(m_window); m_window = nullptr;
         IMG_Quit(); SDL_Quit();
         return false;
     }
+    SDL_GL_MakeCurrent(m_window, m_glContext);
+    SDL_GL_SetSwapInterval(1);   // vsync
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    // Multi-viewport: lets users drag panels off the main window onto their
+    // own OS windows (a different monitor, off-screen, etc.). This is the
+    // whole reason we're on the GL backend — SDL_Renderer2 didn't support it.
+    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+
     // Nice-to-have docking behaviour:
     //   - tabs next to a docked window's title keep the window visible
     //   - auto-hide the tab bar when only one window is docked in a node
@@ -197,8 +212,16 @@ bool ThermoEditor::init() {
 
     setupImGuiStyle();
 
-    ImGui_ImplSDL2_InitForSDLRenderer(m_window, m_renderer);
-    ImGui_ImplSDLRenderer2_Init(m_renderer);
+    // When viewports are enabled ImGui creates platform sub-windows, so
+    // tweak window-rounding/border so the host frames don't look inset.
+    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+        ImGuiStyle& s = ImGui::GetStyle();
+        s.WindowRounding              = 0.f;
+        s.Colors[ImGuiCol_WindowBg].w = 1.f;   // opaque bg per viewport
+    }
+
+    ImGui_ImplSDL2_InitForOpenGL(m_window, m_glContext);
+    ImGui_ImplOpenGL3_Init("#version 330");
 
     // Panels
     m_console        = std::make_unique<Console>(this);        // first: log() target
@@ -214,6 +237,7 @@ bool ThermoEditor::init() {
 }
 
 void ThermoEditor::run() {
+    ImGuiIO& io = ImGui::GetIO();
     while (m_running) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -225,7 +249,7 @@ void ThermoEditor::run() {
                 m_running = false;
         }
 
-        ImGui_ImplSDLRenderer2_NewFrame();
+        ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
 
@@ -298,10 +322,26 @@ void ThermoEditor::run() {
 
         // Render
         ImGui::Render();
-        SDL_SetRenderDrawColor(m_renderer, 18, 18, 24, 255);
-        SDL_RenderClear(m_renderer);
-        ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), m_renderer);
-        SDL_RenderPresent(m_renderer);
+        int fbW = 0, fbH = 0;
+        SDL_GL_GetDrawableSize(m_window, &fbW, &fbH);
+        glViewport(0, 0, fbW, fbH);
+        glClearColor(18.f / 255.f, 18.f / 255.f, 24.f / 255.f, 1.f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+        // Multi-viewport: ImGui has rendered the main window's draw data;
+        // now ask it to render any additional platform windows the user
+        // has torn off. We must restore our own context afterward because
+        // RenderPlatformWindowsDefault leaves the *last* sub-window current.
+        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+            SDL_Window*   backupWin = SDL_GL_GetCurrentWindow();
+            SDL_GLContext backupCtx = SDL_GL_GetCurrentContext();
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+            SDL_GL_MakeCurrent(backupWin, backupCtx);
+        }
+
+        SDL_GL_SwapWindow(m_window);
     }
 }
 
@@ -315,12 +355,12 @@ void ThermoEditor::shutdown() {
     m_codeEditor.reset();
     m_console.reset();
 
-    if (m_renderer) {
-        ImGui_ImplSDLRenderer2_Shutdown();
+    if (m_glContext) {
+        ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplSDL2_Shutdown();
         ImGui::DestroyContext();
-        SDL_DestroyRenderer(m_renderer);
-        m_renderer = nullptr;
+        SDL_GL_DeleteContext(m_glContext);
+        m_glContext = nullptr;
     }
     if (m_window) {
         SDL_DestroyWindow(m_window);
