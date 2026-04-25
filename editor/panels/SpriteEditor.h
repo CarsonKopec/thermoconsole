@@ -63,7 +63,12 @@ private:
     // Undo / redo stacks (whole-sheet snapshots — simple and fast at 64 KiB)
     std::vector<std::vector<uint8_t>> m_undoStack;
     std::vector<std::vector<uint8_t>> m_redoStack;
-    static constexpr size_t kMaxUndo = 64;
+    // 256 × 64 KiB = 16 MiB max — generous, but bounded so a long session
+    // doesn't grow the undo stack without limit.
+    static constexpr size_t kMaxUndo = 256;
+    // Log a one-time warning when the cap first overflows in this session
+    // (any further drops are silent — the message would just spam the log).
+    bool m_undoCapWarned = false;
 
     // Rendering / IO
     void freeTextures();

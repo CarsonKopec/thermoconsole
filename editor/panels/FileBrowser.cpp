@@ -141,12 +141,14 @@ void FileBrowser::draw() {
     if (ImGui::BeginPopupContextWindow("##fb_ctx",
             ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
     {
-        if (ImGui::MenuItem("New File..."))  openNewFileDialog(m_root);
-        if (ImGui::MenuItem("Refresh"))      refresh();
+        if (ImGui::MenuItem("New File..."))    openNewFileDialog(m_root);
+        if (ImGui::MenuItem("New Folder..."))  openNewDirDialog(m_root);
+        if (ImGui::MenuItem("Refresh"))        refresh();
         ImGui::EndPopup();
     }
 
     drawNewFileDialog();
+    drawNewDirDialog();
     drawRenameDialog();
     drawDeleteDialog();
     applyPendingOps();
@@ -204,7 +206,8 @@ void FileBrowser::drawNode(Node& n, const std::string& filterLower) {
                 m_deleteOpen = true;
             }
         } else {
-            if (ImGui::MenuItem("New file here...")) openNewFileDialog(n.path);
+            if (ImGui::MenuItem("New file here..."))   openNewFileDialog(n.path);
+            if (ImGui::MenuItem("New folder here...")) openNewDirDialog(n.path);
             ImGui::Separator();
             if (ImGui::MenuItem("Rename folder...")) {
                 m_renameTarget = n.path;
@@ -277,6 +280,53 @@ void FileBrowser::drawNewFileDialog() {
                 } else {
                     m_editor->log("Failed to create: " + p.string(), true);
                 }
+            }
+        }
+        ImGui::EndPopup();
+    }
+}
+
+void FileBrowser::openNewDirDialog(const fs::path& baseDir) {
+    m_newDirOpen = true;
+    std::snprintf(m_newDirPath, sizeof(m_newDirPath),
+                  "%s/", baseDir.string().c_str());
+}
+
+void FileBrowser::drawNewDirDialog() {
+    if (m_newDirOpen) ImGui::OpenPopup("New Folder");
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, {0.5f, 0.5f});
+    ImGui::SetNextWindowSize({520, 0}, ImGuiCond_Appearing);
+
+    if (ImGui::BeginPopupModal("New Folder", &m_newDirOpen,
+                               ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::TextUnformatted("Folder path (relative to project):");
+        ImGui::SetNextItemWidth(-1);
+        bool enter = ImGui::InputText("##nd", m_newDirPath, sizeof(m_newDirPath),
+                                      ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::Spacing();
+
+        bool create = enter || ImGui::Button("Create", {120, 0});
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", {120, 0})) {
+            m_newDirOpen = false;
+            ImGui::CloseCurrentPopup();
+        }
+
+        if (create && m_newDirPath[0] != '\0') {
+            fs::path p(m_newDirPath);
+            std::error_code ec;
+            if (fs::exists(p, ec)) {
+                m_editor->log("Already exists: " + p.string(), true);
+            } else if (fs::create_directories(p, ec)) {
+                m_editor->log("Created folder: " + p.string());
+                refresh();
+                m_newDirOpen = false;
+                ImGui::CloseCurrentPopup();
+            } else {
+                m_editor->log("Failed to create folder: " + ec.message(), true);
             }
         }
         ImGui::EndPopup();

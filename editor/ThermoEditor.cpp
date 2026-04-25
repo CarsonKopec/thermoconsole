@@ -230,6 +230,7 @@ void ThermoEditor::run() {
         ImGui::NewFrame();
 
         handleShortcuts();
+        updateWindowTitle();
 
         // ── Full-window DockSpace host ──────────────────────────────────────
         // The host window fills the main viewport, hosts the menu bar, and
@@ -390,6 +391,10 @@ void ThermoEditor::openFile(const fs::path& path) {
 
 void ThermoEditor::refreshFileTree() {
     if (m_fileBrowser) m_fileBrowser->refresh();
+}
+
+void ThermoEditor::notifySourceSaved() {
+    if (m_gamePreview) m_gamePreview->onSourceSaved();
 }
 
 // ─── Menu bar ───────────────────────────────────────────────────────────────
@@ -592,7 +597,8 @@ void ThermoEditor::handleShortcuts() {
     ImGuiIO& io = ImGui::GetIO();
 
     // Don't intercept keystrokes while the user is typing into a text field —
-    // except for F5/F6 which are function keys and won't conflict with editing.
+    // except for shortcuts that SHOULD work during editing (save, find,
+    // undo/redo, tab nav, run/stop).
     const bool textInput = io.WantTextInput;
     const bool ctrl  = io.KeyCtrl;
     const bool shift = io.KeyShift;
@@ -613,9 +619,50 @@ void ThermoEditor::handleShortcuts() {
         }
     }
 
+    // Ctrl+F — toggle find bar in the active code buffer (works while typing)
+    if (ctrl && ImGui::IsKeyPressed(ImGuiKey_F, false)) {
+        if (m_codeEditor) m_codeEditor->toggleFind();
+    }
+
+    // Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z — undo/redo on the active code buffer.
+    // InputTextMultiline has its own intra-widget undo; our stack augments it
+    // with whole-buffer restore points per edit-burst.
+    if (ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
+        if (m_codeEditor) m_codeEditor->undo();
+    }
+    if (ctrl && (ImGui::IsKeyPressed(ImGuiKey_Y, false) ||
+                 (shift && ImGui::IsKeyPressed(ImGuiKey_Z, false)))) {
+        if (m_codeEditor) m_codeEditor->redo();
+    }
+
+    // Ctrl+Tab / Ctrl+Shift+Tab — cycle open code tabs
+    if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Tab, false)) {
+        if (m_codeEditor) {
+            if (shift) m_codeEditor->prevTab();
+            else       m_codeEditor->nextTab();
+        }
+    }
+
     // F5/F6 are always live
     if (ImGui::IsKeyPressed(ImGuiKey_F5, false) && m_gamePreview) m_gamePreview->launchGame();
     if (ImGui::IsKeyPressed(ImGuiKey_F6, false) && m_gamePreview) m_gamePreview->stopGame();
+}
+
+// ─── Window title (reflects dirty state) ────────────────────────────────────
+
+void ThermoEditor::updateWindowTitle() {
+    if (!m_window) return;
+    const bool dirty = m_codeEditor && m_codeEditor->anyModified();
+    const std::string proj = hasProject() ? m_manifest.name : std::string{};
+
+    if (dirty == m_titleLastDirty && proj == m_titleLastProj) return;
+    m_titleLastDirty = dirty;
+    m_titleLastProj  = proj;
+
+    std::string title = "ThermoConsole Editor";
+    if (!proj.empty()) title += " — " + proj;
+    if (dirty)         title += "  \xE2\x80\xA2";   // • bullet indicates unsaved
+    SDL_SetWindowTitle(m_window, title.c_str());
 }
 
 // ─── Default dock layout ────────────────────────────────────────────────────

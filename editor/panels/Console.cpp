@@ -52,7 +52,26 @@ void Console::draw() {
     ImGui::Checkbox("Errors only", &m_errorsOnly);
     ImGui::SameLine();
     ImGui::Checkbox("Auto-scroll", &m_autoScroll);
+    ImGui::SameLine(0, 12);
+
+    // Source filter — radio-ish segmented buttons. "All" shows everything,
+    // "Game" shows only lines prefixed with [game] (emitted by GamePreview),
+    // "Editor" shows everything else.
+    ImGui::TextDisabled("Show:");
     ImGui::SameLine();
+    auto srcBtn = [&](const char* label, Source s) {
+        const bool sel = (m_source == s);
+        if (sel) ImGui::PushStyleColor(ImGuiCol_Button,
+                                       {0.25f, 0.45f, 0.85f, 1.f});
+        if (ImGui::SmallButton(label)) m_source = s;
+        if (sel) ImGui::PopStyleColor();
+        ImGui::SameLine(0, 2);
+    };
+    srcBtn("All",    Source::All);
+    srcBtn("Editor", Source::EditorOnly);
+    srcBtn("Game",   Source::GameOnly);
+
+    ImGui::SameLine(0, 12);
     ImGui::SetNextItemWidth(180);
     ImGui::InputTextWithHint("##filter", "filter...", m_filter, sizeof(m_filter));
     ImGui::Separator();
@@ -71,6 +90,9 @@ void Console::draw() {
 
     auto matches = [&](const Entry& e) -> bool {
         if (m_errorsOnly && !e.isError) return false;
+        const bool fromGame = (e.text.rfind("[game]", 0) == 0);
+        if (m_source == Source::GameOnly   && !fromGame) return false;
+        if (m_source == Source::EditorOnly &&  fromGame) return false;
         if (filter.empty()) return true;
         std::string lower(e.text.size(), '\0');
         std::transform(e.text.begin(), e.text.end(), lower.begin(),

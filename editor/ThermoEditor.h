@@ -106,6 +106,11 @@ public:
     void openFile(const fs::path& path);
     void refreshFileTree();
 
+    // Called by panels that mutate on-disk project state (code save, manifest
+    // save). Triggers a live-reload in GamePreview if the game is running and
+    // auto-reload is enabled.
+    void notifySourceSaved();
+
     // SDL accessors
     SDL_Renderer* renderer() { return m_renderer; }
     SDL_Window*   window()   { return m_window;   }
@@ -135,10 +140,16 @@ private:
     std::unique_ptr<ManifestEditor> m_manifestEditor;
 
     // UI state
-    bool m_showImGuiDemo = false;
-    bool m_showAbout     = false;
+    bool m_showImGuiDemo  = false;
+    bool m_showAbout      = false;
     bool m_wantOpenDialog = false;  // next frame, pop the Open-project modal
     char m_openProjectBuf[512] {};
+
+    // Cached title-bar state — only re-set the SDL window title when the
+    // (dirty?, project name) tuple changes, so we don't pay a system call each
+    // frame.
+    bool        m_titleLastDirty = false;
+    std::string m_titleLastProj;
 
     // Internal
     void setupImGuiStyle();
@@ -155,4 +166,8 @@ private:
     ImGuiID m_dockspaceId = 0;
     bool    m_buildDefaultLayout = true;  // true on first frame & after reset
     void    buildDefaultDockLayout(ImGuiID dockspaceId);
+
+    // Refresh the SDL window title based on dirty state. No-op when nothing
+    // changed since last frame.
+    void    updateWindowTitle();
 };

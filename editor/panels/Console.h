@@ -29,6 +29,10 @@ private:
         bool        isError = false;
     };
 
+    // Source filter — "[game]"-prefixed lines come from the running runtime;
+    // everything else is editor-internal.
+    enum class Source { All, EditorOnly, GameOnly };
+
     ThermoEditor*       m_editor;
     mutable std::mutex  m_mutex;
     std::deque<Entry>   m_entries;
@@ -37,6 +41,7 @@ private:
     bool                m_showTimestamps = true;
     bool                m_errorsOnly     = false;
     bool                m_autoScroll     = true;
+    Source              m_source         = Source::All;
     char                m_filter[128] {};
 
     static constexpr size_t kMaxEntries = 2000;

@@ -52,6 +52,9 @@ private:
     bool m_newFileOpen = false;
     char m_newFilePath[256] {};
 
+    bool m_newDirOpen  = false;
+    char m_newDirPath[256] {};
+
     bool       m_renameOpen = false;
     fs::path   m_renameTarget;
     char       m_renameBuf[128] {};
@@ -67,6 +70,8 @@ private:
     bool matchesFilter(const Node& n, const std::string& filterLower) const;
     void openNewFileDialog(const fs::path& baseDir);
     void drawNewFileDialog();
+    void openNewDirDialog(const fs::path& baseDir);
+    void drawNewDirDialog();
     void drawRenameDialog();
     void drawDeleteDialog();
     void applyPendingOps();

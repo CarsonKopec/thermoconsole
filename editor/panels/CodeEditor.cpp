@@ -111,27 +111,157 @@ void CodeEditor::openFile(const fs::path& path) {
 void CodeEditor::saveCurrentFile() {
     if (m_activeTab < 0 || m_activeTab >= (int)m_buffers.size()) return;
     auto& buf = m_buffers[m_activeTab];
-    if (buf.save())
+    if (buf.save()) {
         m_editor->log("Saved: " + buf.path.filename().string());
-    else
+        m_editor->notifySourceSaved();
+    } else {
         m_editor->log("Save failed: " + buf.path.string(), true);
+    }
 }
 
 void CodeEditor::saveAll() {
     int n = 0;
+    std::string names;
     for (auto& buf : m_buffers) {
         if (buf.modified) {
-            if (buf.save()) ++n;
-            else m_editor->log("Save failed: " + buf.path.string(), true);
+            if (buf.save()) {
+                ++n;
+                if (!names.empty()) names += ", ";
+                names += buf.path.filename().string();
+            } else {
+                m_editor->log("Save failed: " + buf.path.string(), true);
+            }
         }
     }
-    m_editor->log("Saved " + std::to_string(n) + " file"
-                  + (n == 1 ? "" : "s") + ".");
+    if (n == 0)      m_editor->log("Save All: nothing to save.");
+    else if (n == 1) m_editor->log("Saved 1 file: " + names);
+    else             m_editor->log("Saved " + std::to_string(n)
+                                   + " files: " + names);
+    if (n > 0) m_editor->notifySourceSaved();
 }
 
 void CodeEditor::closeAll() {
     m_buffers.clear();
     m_activeTab = -1;
+}
+
+// ─── Undo / redo / tab navigation / find ────────────────────────────────────
+
+// Push pre-edit text onto the undo stack when a new edit burst starts.
+// A "burst" is a run of edits separated by less than kSnapshotDebounceSec;
+// passing the debounce threshold opens a new entry.
+void CodeEditor::captureSnapshot(FileBuffer& buf, std::string preEdit) {
+    const double now = ImGui::GetTime();
+
+    // If this edit arrived within the debounce window, extend the current
+    // burst — no new snapshot. We still advance the timestamp.
+    const bool withinBurst =
+        buf.lastSnapshotTime != 0.0
+        && (now - buf.lastSnapshotTime) < kSnapshotDebounceSec
+        && !buf.undoStack.empty();
+
+    if (!withinBurst) {
+        if (buf.undoStack.empty() || buf.undoStack.back() != preEdit) {
+            buf.undoStack.push_back(std::move(preEdit));
+            if (buf.undoStack.size() > kMaxUndo)
+                buf.undoStack.erase(buf.undoStack.begin());
+            buf.redoStack.clear();
+        }
+    }
+    buf.lastSnapshotTime = now;
+}
+
+void CodeEditor::undo() {
+    if (m_activeTab < 0 || m_activeTab >= (int)m_buffers.size()) return;
+    auto& buf = m_buffers[m_activeTab];
+    if (buf.undoStack.empty()) return;
+
+    buf.redoStack.push_back(buf.text);
+    buf.text = std::move(buf.undoStack.back());
+    buf.undoStack.pop_back();
+    buf.modified = true;
+    buf.lastSnapshotTime = ImGui::GetTime();
+    if (buf.find.active) rebuildFindMatches(buf);
+}
+
+void CodeEditor::redo() {
+    if (m_activeTab < 0 || m_activeTab >= (int)m_buffers.size()) return;
+    auto& buf = m_buffers[m_activeTab];
+    if (buf.redoStack.empty()) return;
+
+    buf.undoStack.push_back(buf.text);
+    if (buf.undoStack.size() > kMaxUndo)
+        buf.undoStack.erase(buf.undoStack.begin());
+    buf.text = std::move(buf.redoStack.back());
+    buf.redoStack.pop_back();
+    buf.modified = true;
+    buf.lastSnapshotTime = ImGui::GetTime();
+    if (buf.find.active) rebuildFindMatches(buf);
+}
+
+void CodeEditor::nextTab() {
+    if (m_buffers.empty()) return;
+    int n = (int)m_buffers.size();
+    m_pendingFocus = (m_activeTab + 1) % n;
+}
+
+void CodeEditor::prevTab() {
+    if (m_buffers.empty()) return;
+    int n = (int)m_buffers.size();
+    m_pendingFocus = (m_activeTab - 1 + n) % n;
+}
+
+void CodeEditor::toggleFind() {
+    if (m_activeTab < 0 || m_activeTab >= (int)m_buffers.size()) {
+        m_visible = true;  // no buffer — at least ensure the panel is visible
+        return;
+    }
+    auto& buf = m_buffers[m_activeTab];
+    buf.find.active = !buf.find.active;
+    if (buf.find.active) {
+        buf.find.focusInput = true;
+        rebuildFindMatches(buf);
+    }
+    m_visible = true;
+}
+
+void CodeEditor::rebuildFindMatches(FileBuffer& buf) {
+    buf.find.matches.clear();
+    buf.find.current = -1;
+    if (buf.find.query[0] == '\0') return;
+
+    const std::string q = buf.find.query;
+    if (buf.find.caseSens) {
+        size_t pos = 0;
+        while ((pos = buf.text.find(q, pos)) != std::string::npos) {
+            buf.find.matches.push_back(pos);
+            pos += q.size();
+        }
+    } else {
+        auto lower = [](unsigned char c) -> char {
+            return (char)std::tolower(c);
+        };
+        std::string ql(q.size(), '\0');
+        std::transform(q.begin(), q.end(), ql.begin(), lower);
+        std::string tl(buf.text.size(), '\0');
+        std::transform(buf.text.begin(), buf.text.end(), tl.begin(), lower);
+        size_t pos = 0;
+        while ((pos = tl.find(ql, pos)) != std::string::npos) {
+            buf.find.matches.push_back(pos);
+            pos += ql.size();
+        }
+    }
+    if (!buf.find.matches.empty()) jumpToMatch(buf, 0);
+}
+
+void CodeEditor::jumpToMatch(FileBuffer& buf, int which) {
+    if (buf.find.matches.empty()) return;
+    int n = (int)buf.find.matches.size();
+    which = ((which % n) + n) % n;   // wrap to [0, n)
+    buf.find.current       = which;
+    buf.find.pendingSelect = true;
+    buf.find.pendingStart  = buf.find.matches[which];
+    buf.find.pendingEnd    = buf.find.pendingStart + std::strlen(buf.find.query);
 }
 
 void CodeEditor::drawMenuItem() {
@@ -204,9 +334,19 @@ void CodeEditor::drawEditor(FileBuffer& buf) {
         buf.mode = editMode ? ViewMode::Preview : ViewMode::Edit;
     }
     ImGui::SameLine();
-    ImGui::TextDisabled("  Click to toggle between edit and syntax-highlighted preview");
+    if (ImGui::SmallButton(buf.find.active ? "Close Find" : "Find (Ctrl+F)")) {
+        buf.find.active = !buf.find.active;
+        if (buf.find.active) {
+            buf.find.focusInput = true;
+            rebuildFindMatches(buf);
+        }
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("  Ctrl+Z undo  /  Ctrl+Y redo  /  Ctrl+Tab next");
 
     ImGui::Separator();
+
+    if (buf.find.active) drawFindBar(buf);
 
     // ── Main pane ───────────────────────────────────────────────────────────
     ImVec2 avail = ImGui::GetContentRegionAvail();
@@ -231,49 +371,121 @@ void CodeEditor::drawEditor(FileBuffer& buf) {
                         buf.modified ? "modified" : "clean");
 }
 
+// ── Find bar (shared by edit + preview) ─────────────────────────────────────
+
+void CodeEditor::drawFindBar(FileBuffer& buf) {
+    ImGui::PushID("##findbar");
+    if (buf.find.focusInput) {
+        ImGui::SetKeyboardFocusHere();
+        buf.find.focusInput = false;
+    }
+    ImGui::SetNextItemWidth(260);
+    bool queryEnter = ImGui::InputTextWithHint(
+        "##q", "find in this file...",
+        buf.find.query, sizeof(buf.find.query),
+        ImGuiInputTextFlags_EnterReturnsTrue);
+    bool queryChanged = ImGui::IsItemEdited();
+    if (queryChanged) rebuildFindMatches(buf);
+
+    ImGui::SameLine();
+    if (ImGui::Checkbox("Aa", &buf.find.caseSens))
+        rebuildFindMatches(buf);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Match case");
+
+    ImGui::SameLine();
+    const int n = (int)buf.find.matches.size();
+    if (ImGui::SmallButton("Prev") && n > 0)
+        jumpToMatch(buf, buf.find.current - 1);
+    ImGui::SameLine();
+    if ((ImGui::SmallButton("Next") || queryEnter) && n > 0)
+        jumpToMatch(buf, buf.find.current < 0 ? 0 : buf.find.current + 1);
+
+    ImGui::SameLine();
+    if (n == 0)
+        ImGui::TextColored(buf.find.query[0] ? ImVec4{1.f,0.55f,0.35f,1.f}
+                                             : ImVec4{0.5f,0.5f,0.55f,1.f},
+                           "%s", buf.find.query[0] ? "no matches" : "");
+    else
+        ImGui::TextDisabled("Match %d of %d", buf.find.current + 1, n);
+
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Close"))
+        buf.find.active = false;
+    ImGui::PopID();
+
+    ImGui::Separator();
+}
+
 // ── Edit pane: a single InputTextMultiline that grows via CallbackResize ──
+//
+// The widget uses three callbacks, all multiplexed through one function:
+//   - Resize : grow the backing std::string when ImGui needs more capacity
+//   - Always : a one-shot "set selection" after Find → jumps the cursor to
+//              the hit and scrolls it into view (InputTextMultiline's own
+//              scroll follows the cursor).
 
 void CodeEditor::drawEditPane(FileBuffer& buf) {
-    // Callback data struct so we can capture buf by pointer
+    struct UserData {
+        std::string* text;
+        FindState*   find;     // may be null
+    };
+
     struct CB {
-        static int resize(ImGuiInputTextCallbackData* d) {
+        static int dispatch(ImGuiInputTextCallbackData* d) {
+            auto* u = static_cast<UserData*>(d->UserData);
             if (d->EventFlag & ImGuiInputTextFlags_CallbackResize) {
-                auto* s = static_cast<std::string*>(d->UserData);
-                // ImGui requires the buffer be at least BufSize bytes
-                s->resize(static_cast<size_t>(d->BufSize));
-                d->Buf = s->data();
+                u->text->resize(static_cast<size_t>(d->BufSize));
+                d->Buf = u->text->data();
+            }
+            if (d->EventFlag & ImGuiInputTextFlags_CallbackAlways) {
+                // Apply a one-shot selection-move requested by Find.
+                if (u->find && u->find->pendingSelect) {
+                    int s = (int)u->find->pendingStart;
+                    int e = (int)u->find->pendingEnd;
+                    d->CursorPos      = e;
+                    d->SelectionStart = s;
+                    d->SelectionEnd   = e;
+                    u->find->pendingSelect = false;
+                }
             }
             return 0;
         }
     };
 
-    // Make sure the string has at least 1 byte of storage for the null
-    // terminator — std::string::data() returns a null-terminated pointer in
-    // C++17+, but we want spare capacity so the widget doesn't immediately
-    // trigger a resize on first character.
     if (buf.text.capacity() < buf.text.size() + 1)
         buf.text.reserve(buf.text.size() + 1024);
 
     ImGuiInputTextFlags flags = ImGuiInputTextFlags_AllowTabInput
-                              | ImGuiInputTextFlags_CallbackResize;
+                              | ImGuiInputTextFlags_CallbackResize
+                              | ImGuiInputTextFlags_CallbackAlways;
+
+    // Cache the pre-edit text (as the widget writes the new content directly
+    // through our buf.text pointer, we need a copy to snapshot). Cheap for
+    // typical game.lua sizes; would want a dirty-flag optimization for
+    // multi-MB files.
+    std::string preEdit = buf.text;
+
+    UserData ud{ &buf.text, &buf.find };
 
     ImVec2 sz = ImGui::GetContentRegionAvail();
-    if (ImGui::InputTextMultiline("##code",
-                                  buf.text.data(),
-                                  buf.text.capacity() + 1,
-                                  sz, flags,
-                                  &CB::resize, &buf.text))
-    {
-        // InputText writes the current length via strlen() — trim the string
-        // so m_text.size() matches the actual content.
+    bool changed = ImGui::InputTextMultiline("##code",
+                                             buf.text.data(),
+                                             buf.text.capacity() + 1,
+                                             sz, flags,
+                                             &CB::dispatch, &ud);
+    if (changed) {
         buf.text.resize(std::strlen(buf.text.c_str()));
-        buf.modified = true;
+        if (buf.text != preEdit) {    // InputText sometimes re-fires without real changes
+            captureSnapshot(buf, std::move(preEdit));
+            buf.modified = true;
+            if (buf.find.active) rebuildFindMatches(buf);
+        }
     }
 }
 
 // ── Preview pane: read-only syntax-highlighted view ─────────────────────────
 
-void CodeEditor::drawPreviewPane(const FileBuffer& buf) {
+void CodeEditor::drawPreviewPane(FileBuffer& buf) {
     const ImU32 COL_DEFAULT  = IM_COL32(200, 200, 210, 255);
     const ImU32 COL_KEYWORD  = IM_COL32(100, 160, 255, 255);
     const ImU32 COL_BUILTIN  = IM_COL32( 80, 210, 180, 255);
@@ -282,6 +494,8 @@ void CodeEditor::drawPreviewPane(const FileBuffer& buf) {
     const ImU32 COL_COMMENT  = IM_COL32(110, 120, 130, 255);
     const ImU32 COL_FUNCTION = IM_COL32(230, 200, 120, 255);
     const ImU32 COL_LINENUM  = IM_COL32( 80,  80, 100, 255);
+    const ImU32 COL_MATCH_BG = IM_COL32(80, 120, 40,  110);
+    const ImU32 COL_CURMATCH = IM_COL32(230, 180, 40, 180);
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const float line_h = ImGui::GetTextLineHeight();
@@ -293,9 +507,30 @@ void CodeEditor::drawPreviewPane(const FileBuffer& buf) {
     const int first_line   = std::max(0, (int)(scroll_y / line_h) - 2);
     const int last_line    =       (int)((scroll_y + viewport_h) / line_h) + 2;
 
+    // If Find asked us to jump to a match, scroll the match into view and
+    // clear the flag. (The same pendingSelect flag is also consumed by the
+    // edit-pane callback; in preview we just scroll.)
+    if (buf.find.pendingSelect) {
+        // Count newlines before the match to derive a target line.
+        size_t lineHit = 0;
+        for (size_t i = 0; i < buf.find.pendingStart && i < buf.text.size(); ++i)
+            if (buf.text[i] == '\n') ++lineHit;
+        const float targetY = lineHit * line_h;
+        const float centeredY = targetY - viewport_h * 0.3f;
+        ImGui::SetScrollY(std::max(0.f, centeredY));
+        buf.find.pendingSelect = false;
+    }
+
+    // Per-line match lookup: only iterate matches in this line during
+    // rendering, so large files stay fast even with many hits. Build a
+    // sparse map of byte-offset → "this line contains matches starting here".
+    const std::string qs = buf.find.query;
+    const size_t      qn = qs.size();
+
     const std::string& src = buf.text;
     int    line_no    = 0;
     size_t line_start = 0;
+    size_t matchIdx   = 0;   // cursor into buf.find.matches
 
     while (line_start <= src.size()) {
         size_t line_end = src.find('\n', line_start);
@@ -305,6 +540,26 @@ void CodeEditor::drawPreviewPane(const FileBuffer& buf) {
         if (line_no >= first_line && line_no <= last_line) {
             const std::string line = src.substr(line_start, line_end - line_start);
             const float y = origin.y + line_no * line_h;
+
+            // Draw match highlight rects (background) before any text
+            if (qn > 0 && !buf.find.matches.empty()) {
+                // Fast-forward matchIdx to first match at-or-after line_start
+                while (matchIdx < buf.find.matches.size() &&
+                       buf.find.matches[matchIdx] < line_start)
+                    ++matchIdx;
+                size_t m = matchIdx;
+                while (m < buf.find.matches.size() &&
+                       buf.find.matches[m] < line_end)
+                {
+                    size_t col_in_line = buf.find.matches[m] - line_start;
+                    float x0 = origin.x + char_w * 5.f + col_in_line * char_w;
+                    float x1 = x0 + qn * char_w;
+                    ImU32 col = ((int)m == buf.find.current) ? COL_CURMATCH
+                                                             : COL_MATCH_BG;
+                    dl->AddRectFilled({x0, y}, {x1, y + line_h}, col);
+                    ++m;
+                }
+            }
 
             // Line number gutter
             char num_buf[12];
@@ -430,6 +685,7 @@ void CodeEditor::drawCloseConfirm() {
         if (ImGui::Button("Save and close", {140, 0})) {
             if (buf.save()) {
                 m_editor->log("Saved: " + buf.path.filename().string());
+                m_editor->notifySourceSaved();
                 closeIt();
             } else {
                 m_editor->log("Save failed: " + buf.path.string(), true);

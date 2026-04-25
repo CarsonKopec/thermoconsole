@@ -44,11 +44,19 @@ public:
     void launchGame();
     void stopGame();
     void packRom();   // async; polled in draw()
+    void reload();    // stop + relaunch if currently running (no-op otherwise)
+
+    // Called by other panels after a save event — relaunches iff auto-reload
+    // is enabled and the game is currently running.
+    void onSourceSaved();
+
+    bool isRunning() const { return m_running.load(); }
 
 private:
     ThermoEditor*  m_editor;
     fs::path       m_projectPath;
-    bool           m_visible = true;
+    bool           m_visible         = true;
+    bool           m_autoReloadOnSave = true;   // live-reload on Ctrl+S
 
     // Process + reader thread lifecycle
     std::atomic<bool>  m_running{false};
@@ -68,6 +76,11 @@ private:
     std::mutex                m_outputMutex;
     std::deque<std::string>   m_pendingOutput;   // drained each frame -> console
     std::deque<std::string>   m_recentOutput;    // shown in preview box (last N)
+
+    // Last time the game emitted any output, in SDL ticks (ms since boot).
+    // Atomic so the UI thread can read without taking m_outputMutex every frame.
+    // 0 = never; reset on each launch.
+    std::atomic<uint64_t>     m_lastOutputTick{0};
 
     // Async ROM packing
     std::future<int>   m_packFuture;
