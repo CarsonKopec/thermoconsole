@@ -91,6 +91,7 @@ set(EDITOR_SOURCES
     ThermoEditor.cpp
     panels/CodeEditor.cpp
     panels/SpriteEditor.cpp
+    panels/SoundEditor.cpp
     panels/FileBrowser.cpp
     panels/GamePreview.cpp
     panels/Console.cpp
@@ -101,6 +102,7 @@ set(EDITOR_HEADERS
     ThermoEditor.h
     panels/CodeEditor.h
     panels/SpriteEditor.h
+    panels/SoundEditor.h
     panels/FileBrowser.h
     panels/GamePreview.h
     panels/Console.h

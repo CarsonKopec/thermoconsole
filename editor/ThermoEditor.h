@@ -22,6 +22,7 @@ namespace fs = std::filesystem;
 
 class CodeEditor;
 class SpriteEditor;
+class SoundEditor;
 class FileBrowser;
 class GamePreview;
 class Console;
@@ -72,6 +73,7 @@ struct GameManifest {
     int         sprite_grid_size = 16;
     std::string sprites_file     = "sprites.png";
     std::string tiles_file       = "tiles.png";
+    std::string sounds_file      = "sounds.json";
 
     bool load(const fs::path& path);
     bool save(const fs::path& path) const;
@@ -139,6 +141,7 @@ private:
     // Panels (owned)
     std::unique_ptr<CodeEditor>     m_codeEditor;
     std::unique_ptr<SpriteEditor>   m_spriteEditor;
+    std::unique_ptr<SoundEditor>    m_soundEditor;
     std::unique_ptr<FileBrowser>    m_fileBrowser;
     std::unique_ptr<GamePreview>    m_gamePreview;
     std::unique_ptr<Console>        m_console;
