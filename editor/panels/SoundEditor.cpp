@@ -181,6 +181,7 @@ struct JsonReader {
 SoundEditor::SoundEditor(ThermoEditor* editor) : m_editor(editor) {
     initAudio();
     clearAllSfx();
+    seedDefaultPresets();
 }
 
 SoundEditor::~SoundEditor() {
@@ -193,7 +194,9 @@ void SoundEditor::onProjectOpened(const fs::path& projectPath) {
     m_selectedSfx  = 0;
     m_selectedStep = -1;
     clearAllSfx();
-    load();   // no-op + log if file missing — that's fine, blank slate
+    m_presets.clear();
+    load();                  // populates m_sfx and (if present) m_presets
+    seedDefaultPresets();    // only fills if load found none
 }
 
 void SoundEditor::onProjectClosed() {
@@ -358,6 +361,27 @@ void SoundEditor::markDirty() {
     m_dirty = true;
 }
 
+void SoundEditor::seedDefaultPresets() {
+    if (!m_presets.empty()) return;
+    // Hand-picked starters that show off each waveform / effect.
+    m_presets.push_back({"Lead",  WaveSquare,   5, EffectNone});
+    m_presets.push_back({"Bass",  WaveTriangle, 6, EffectNone});
+    m_presets.push_back({"Pluck", WaveSaw,      4, EffectFadeOut});
+    m_presets.push_back({"Pad",   WavePulse,    4, EffectFadeIn});
+    m_presets.push_back({"Kick",  WaveNoise,    7, EffectDrop});
+    m_presets.push_back({"Snare", WaveNoise,    5, EffectFadeOut});
+    m_presets.push_back({"Hat",   WaveNoise,    3, EffectFadeOut});
+}
+
+void SoundEditor::applyPresetToStep(const Preset& p, int stepIdx) {
+    if (stepIdx < 0 || stepIdx >= kSteps) return;
+    Step& st = m_sfx[m_selectedSfx].steps[stepIdx];
+    st.wave   = p.wave;
+    st.volume = p.volume;
+    st.effect = p.effect;
+    markDirty();
+}
+
 // ─── IO ────────────────────────────────────────────────────────────────────
 
 fs::path SoundEditor::soundsPath() const {
@@ -413,7 +437,22 @@ void SoundEditor::save() {
 
 void SoundEditor::serialize(std::string& out) const {
     std::ostringstream o;
-    o << "{\n  \"version\": 1,\n  \"sfx\": [\n";
+    o << "{\n  \"version\": 1,\n";
+
+    // Presets first so the file reads top-down (declarations before uses).
+    o << "  \"presets\": [";
+    for (size_t i = 0; i < m_presets.size(); ++i) {
+        const Preset& p = m_presets[i];
+        if (i > 0) o << ",";
+        o << "\n    {\"name\": \"" << p.name << "\""
+          << ", \"wave\": "   << (int)p.wave
+          << ", \"volume\": " << (int)p.volume
+          << ", \"effect\": " << (int)p.effect
+          << "}";
+    }
+    o << (m_presets.empty() ? "" : "\n  ") << "],\n";
+
+    o << "  \"sfx\": [\n";
     for (int i = 0; i < kSfxCount; ++i) {
         const Sfx& s = m_sfx[i];
         o << "    {\n"
@@ -449,7 +488,28 @@ bool SoundEditor::deserialize(const std::string& text) {
         while (!r.peek('}')) {
             std::string key = r.readString();
             r.expect(':');
-            if (key == "sfx") {
+            if (key == "presets") {
+                m_presets.clear();
+                r.expect('[');
+                while (!r.peek(']')) {
+                    Preset p;
+                    r.expect('{');
+                    while (!r.peek('}')) {
+                        std::string fk = r.readString();
+                        r.expect(':');
+                        if      (fk == "name")   p.name   = r.readString();
+                        else if (fk == "wave")   p.wave   = (uint8_t)std::clamp((int)r.readNumber(), 0, (int)WaveCount   - 1);
+                        else if (fk == "volume") p.volume = (uint8_t)std::clamp((int)r.readNumber(), 0, 7);
+                        else if (fk == "effect") p.effect = (uint8_t)std::clamp((int)r.readNumber(), 0, (int)EffectCount - 1);
+                        else                     r.skipValue();
+                        if (r.peek(',')) r.expect(',');
+                    }
+                    r.expect('}');
+                    m_presets.push_back(std::move(p));
+                    if (r.peek(',')) r.expect(',');
+                }
+                r.expect(']');
+            } else if (key == "sfx") {
                 r.expect('[');
                 int slot = 0;
                 while (!r.peek(']')) {
@@ -525,7 +585,8 @@ void SoundEditor::draw() {
     drawToolbar();
     ImGui::Separator();
 
-    // Two-column body: sfx list on the left, grid + inspector on the right.
+    // Two-column body: sfx list on the left, palette + grid + inspector on
+    // the right.
     const float listW = 140.f;
     if (ImGui::BeginChild("##sfxlist", {listW, 0}, true)) {
         drawSfxList();
@@ -533,6 +594,8 @@ void SoundEditor::draw() {
     ImGui::EndChild();
     ImGui::SameLine();
     if (ImGui::BeginChild("##gridarea", {0, 0}, false)) {
+        drawPalette();
+        ImGui::Separator();
         drawGrid();
         ImGui::Separator();
         drawStepInspector();
@@ -623,6 +686,125 @@ void SoundEditor::drawSfxList() {
     }
 }
 
+// ─── Palette (drag sources) ────────────────────────────────────────────────
+//
+// Three tabs of draggable cards. The grid columns (drawGrid) accept the
+// payloads as drop targets. Payload IDs:
+//   "SFX_WAVE"   → uint8_t   waveform index
+//   "SFX_EFFECT" → uint8_t   effect index
+//   "SFX_PRESET" → int       index into m_presets
+
+void SoundEditor::drawPalette() {
+    ImGui::Text("Palette");
+    ImGui::SameLine();
+    ImGui::TextDisabled(" \xE2\x80\xA2 drag onto a step in the grid below");
+
+    if (ImGui::BeginTabBar("##palette_tabs")) {
+
+        // ── Waves ────────────────────────────────────────────────────────
+        if (ImGui::BeginTabItem("Waves")) {
+            m_paletteTab = PaletteTab::Waves;
+            for (uint8_t w = 0; w < (uint8_t)WaveCount; ++w) {
+                ImGui::PushID(w);
+                ImGui::PushStyleColor(ImGuiCol_Button, waveColor(w));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, waveColor(w));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  waveColor(w));
+                ImGui::Button(waveLabel(w), {78, 30});
+                ImGui::PopStyleColor(3);
+                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                    ImGui::SetDragDropPayload("SFX_WAVE", &w, sizeof(w));
+                    ImGui::Text("Wave: %s", waveLabel(w));
+                    ImGui::EndDragDropSource();
+                }
+                ImGui::PopID();
+                ImGui::SameLine();
+            }
+            ImGui::NewLine();
+            ImGui::EndTabItem();
+        }
+
+        // ── Effects ──────────────────────────────────────────────────────
+        if (ImGui::BeginTabItem("Effects")) {
+            m_paletteTab = PaletteTab::Effects;
+            for (uint8_t e = 0; e < (uint8_t)EffectCount; ++e) {
+                ImGui::PushID(100 + e);
+                if (ImGui::Button(effectLabel(e), {78, 30})) { /* drag-only */ }
+                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                    ImGui::SetDragDropPayload("SFX_EFFECT", &e, sizeof(e));
+                    ImGui::Text("Effect: %s", effectLabel(e));
+                    ImGui::EndDragDropSource();
+                }
+                ImGui::PopID();
+                ImGui::SameLine();
+            }
+            ImGui::NewLine();
+            ImGui::EndTabItem();
+        }
+
+        // ── Presets ──────────────────────────────────────────────────────
+        if (ImGui::BeginTabItem("Presets")) {
+            m_paletteTab = PaletteTab::Presets;
+
+            // Save-current-step-as-preset button. Only enabled when a step is
+            // selected — that's where we read the wave / volume / effect from.
+            const bool canSave = (m_selectedStep >= 0);
+            ImGui::BeginDisabled(!canSave);
+            if (ImGui::Button("+ Save selected step", {180, 26})) {
+                const Step& src = m_sfx[m_selectedSfx].steps[m_selectedStep];
+                Preset p;
+                char nameBuf[32];
+                std::snprintf(nameBuf, sizeof(nameBuf),
+                              "preset_%d", (int)m_presets.size());
+                p.name   = nameBuf;
+                p.wave   = src.wave;
+                p.volume = (src.volume == 0) ? 5 : src.volume;
+                p.effect = src.effect;
+                m_presets.push_back(p);
+                markDirty();
+            }
+            ImGui::EndDisabled();
+            if (!canSave && ImGui::IsItemHovered())
+                ImGui::SetTooltip("Click a step in the grid first.");
+            ImGui::SameLine();
+            ImGui::TextDisabled(" \xE2\x80\xA2 right-click a preset to delete");
+
+            // Card row.
+            int toDelete = -1;
+            for (int i = 0; i < (int)m_presets.size(); ++i) {
+                ImGui::PushID(200 + i);
+                const Preset& p = m_presets[i];
+                ImGui::PushStyleColor(ImGuiCol_Button, waveColor(p.wave));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, waveColor(p.wave));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  waveColor(p.wave));
+                ImGui::Button(p.name.c_str(), {96, 30});
+                ImGui::PopStyleColor(3);
+                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                    ImGui::SetDragDropPayload("SFX_PRESET", &i, sizeof(i));
+                    ImGui::Text("Preset: %s\n%s, vol %d, %s",
+                                p.name.c_str(),
+                                waveLabel(p.wave), p.volume,
+                                effectLabel(p.effect));
+                    ImGui::EndDragDropSource();
+                }
+                if (ImGui::BeginPopupContextItem("##preset_ctx")) {
+                    if (ImGui::MenuItem("Delete preset")) toDelete = i;
+                    ImGui::EndPopup();
+                }
+                ImGui::PopID();
+                ImGui::SameLine();
+            }
+            ImGui::NewLine();
+            if (toDelete >= 0 && toDelete < (int)m_presets.size()) {
+                m_presets.erase(m_presets.begin() + toDelete);
+                markDirty();
+            }
+            ImGui::EndTabItem();
+        }
+
+        ImGui::EndTabBar();
+    }
+}
+
 // ─── Step grid ─────────────────────────────────────────────────────────────
 
 void SoundEditor::drawGrid() {
@@ -709,25 +891,58 @@ void SoundEditor::drawGrid() {
                         IM_COL32(220, 200, 100, 255), glyph);
     }
 
-    // Click-to-select (pitch area also sets pitch by vertical position).
-    ImGui::InvisibleButton("##gridhit", {colW * kSteps, totalH});
-    if (ImGui::IsItemActive() && ImGui::IsMouseDown(0)) {
-        ImVec2 mp = ImGui::GetIO().MousePos;
-        int col = (int)((mp.x - origin.x) / colW);
-        if (col >= 0 && col < kSteps) {
-            m_selectedStep = col;
-            // If the click is in the pitch area, set the pitch too — quick
-            // sketching workflow.
+    // Per-column hit areas — one InvisibleButton each so each can be its own
+    // drag-drop target. Within a column we still support click + drag-in-the-
+    // pitch-area sketching, which now reads the column index directly from
+    // the loop instead of computing it from mouse-x.
+    for (int i = 0; i < kSteps; ++i) {
+        float x0 = origin.x + i * colW;
+        ImGui::SetCursorScreenPos({x0, origin.y});
+        char id[16];
+        std::snprintf(id, sizeof(id), "##col%d", i);
+        ImGui::InvisibleButton(id, {colW, totalH});
+
+        // Sketching: click anywhere in the column selects it; click in the
+        // pitch area also sets pitch by vertical mouse position.
+        if (ImGui::IsItemActive() && ImGui::IsMouseDown(0)) {
+            m_selectedStep = i;
+            ImVec2 mp = ImGui::GetIO().MousePos;
             if (mp.y >= origin.y && mp.y <= origin.y + pitchH) {
                 float t = 1.f - (mp.y - origin.y) / pitchH;
                 int p = (int)std::round(std::clamp(t, 0.f, 1.f) * 63.f);
-                Step& st = s.steps[col];
+                Step& st = s.steps[i];
                 if (st.pitch != (uint8_t)p) {
                     st.pitch = (uint8_t)p;
                     if (st.volume == 0) st.volume = 5;   // make it audible
                     markDirty();
                 }
             }
+        }
+
+        // Drop targets — palette cards push payloads here.
+        if (ImGui::BeginDragDropTarget()) {
+            if (auto* pl = ImGui::AcceptDragDropPayload("SFX_WAVE")) {
+                uint8_t w = *(const uint8_t*)pl->Data;
+                Step& st = s.steps[i];
+                st.wave = w;
+                if (st.volume == 0) st.volume = 5;
+                m_selectedStep = i;
+                markDirty();
+            }
+            if (auto* pl = ImGui::AcceptDragDropPayload("SFX_EFFECT")) {
+                uint8_t e = *(const uint8_t*)pl->Data;
+                s.steps[i].effect = e;
+                m_selectedStep = i;
+                markDirty();
+            }
+            if (auto* pl = ImGui::AcceptDragDropPayload("SFX_PRESET")) {
+                int idx = *(const int*)pl->Data;
+                if (idx >= 0 && idx < (int)m_presets.size()) {
+                    applyPresetToStep(m_presets[idx], i);
+                    m_selectedStep = i;
+                }
+            }
+            ImGui::EndDragDropTarget();
         }
     }
 }

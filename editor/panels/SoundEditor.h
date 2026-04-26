@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <mutex>
 #include <string>
+#include <vector>
 
 class SoundEditor {
 public:
@@ -77,6 +78,15 @@ public:
         std::array<Step, kSteps>     steps      {};
     };
 
+    // A draggable bundle of (wave, volume, effect). Pitch stays per-step.
+    // Persisted alongside SFX in sounds.json under "presets".
+    struct Preset {
+        std::string name;
+        uint8_t     wave   = WaveTriangle;
+        uint8_t     volume = 5;
+        uint8_t     effect = EffectNone;
+    };
+
 private:
     ThermoEditor*              m_editor;
     fs::path                   m_projectPath;
@@ -86,6 +96,11 @@ private:
     std::array<Sfx, kSfxCount> m_sfx {};
     int                        m_selectedSfx  = 0;
     int                        m_selectedStep = -1;   // -1 = no inspector
+
+    // Drag-drop palette state. Presets are persisted; tab is a UI-only choice.
+    enum class PaletteTab { Waves, Effects, Presets };
+    PaletteTab                 m_paletteTab = PaletteTab::Waves;
+    std::vector<Preset>        m_presets;
 
     // ── Audio (SDL_AudioDeviceID; callback runs on its own thread) ─────────
     SDL_AudioDeviceID          m_audioDev   = 0;
@@ -113,6 +128,8 @@ private:
     // ── Edit operations ────────────────────────────────────────────────────
     void clearSfx(int slot);
     void clearAllSfx();
+    void seedDefaultPresets();   // only if m_presets is empty (first run / new project)
+    void applyPresetToStep(const Preset& p, int stepIdx);
     void markDirty();   // also pings the manifest's notify-source path
 
     // ── IO ─────────────────────────────────────────────────────────────────
@@ -125,6 +142,7 @@ private:
     // ── UI sub-sections ────────────────────────────────────────────────────
     void drawToolbar();
     void drawSfxList();
+    void drawPalette();
     void drawGrid();
     void drawStepInspector();
 };
