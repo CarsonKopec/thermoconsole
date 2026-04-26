@@ -10,6 +10,7 @@
 #include "panels/GamePreview.h"
 #include "panels/ManifestEditor.h"
 #include "panels/SpriteEditor.h"
+#include "panels/SoundEditor.h"
 
 #include <imgui_internal.h>   // DockBuilder* — docking branch only
 #include <SDL_opengl.h>       // gl.h prototypes (glViewport/glClear/glClearColor)
@@ -105,6 +106,7 @@ bool GameManifest::load(const fs::path& path) {
     orientation  = jsonGetStr(json, "orientation",  orientation);
     sprites_file = jsonGetStr(json, "sprites_file", sprites_file);
     tiles_file   = jsonGetStr(json, "tiles_file",   tiles_file);
+    sounds_file  = jsonGetStr(json, "sounds_file",  sounds_file);
 
     display_width    = std::clamp(jsonGetInt(json, "display_width",    display_width),    1, 4096);
     display_height   = std::clamp(jsonGetInt(json, "display_height",   display_height),   1, 4096);
@@ -129,7 +131,8 @@ bool GameManifest::save(const fs::path& path) const {
       << "  \"orientation\": \""    << jsonEscape(orientation)  << "\",\n"
       << "  \"sprite_grid_size\": " << sprite_grid_size         << ",\n"
       << "  \"sprites_file\": \""   << jsonEscape(sprites_file) << "\",\n"
-      << "  \"tiles_file\": \""     << jsonEscape(tiles_file)   << "\"\n"
+      << "  \"tiles_file\": \""     << jsonEscape(tiles_file)   << "\",\n"
+      << "  \"sounds_file\": \""    << jsonEscape(sounds_file)  << "\"\n"
       << "}\n";
     return static_cast<bool>(f);
 }
@@ -149,7 +152,7 @@ ThermoEditor::~ThermoEditor() {
 }
 
 bool ThermoEditor::init() {
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_AUDIO) != 0) {
         std::fprintf(stderr, "SDL_Init error: %s\n", SDL_GetError());
         return false;
     }
@@ -231,6 +234,7 @@ bool ThermoEditor::init() {
     m_console        = std::make_unique<Console>(this);        // first: log() target
     m_codeEditor     = std::make_unique<CodeEditor>(this);
     m_spriteEditor   = std::make_unique<SpriteEditor>(this);
+    m_soundEditor    = std::make_unique<SoundEditor>(this);
     m_fileBrowser    = std::make_unique<FileBrowser>(this);
     m_gamePreview    = std::make_unique<GamePreview>(this);
     m_manifestEditor = std::make_unique<ManifestEditor>(this);
@@ -312,6 +316,7 @@ void ThermoEditor::run() {
             m_fileBrowser->draw();
             m_codeEditor->draw();
             m_spriteEditor->draw();
+            m_soundEditor->draw();
             m_gamePreview->draw();
             m_console->draw();
             m_manifestEditor->draw();
@@ -355,6 +360,9 @@ void ThermoEditor::shutdown() {
     m_manifestEditor.reset();
     m_gamePreview.reset();
     m_fileBrowser.reset();
+    // SoundEditor's destructor closes its SDL audio device — must run while
+    // SDL is still alive.
+    m_soundEditor.reset();
     m_spriteEditor.reset();
     m_codeEditor.reset();
     m_console.reset();
@@ -403,6 +411,7 @@ bool ThermoEditor::openProject(const fs::path& path) {
     m_fileBrowser->onProjectOpened(path);
     m_codeEditor->onProjectOpened(path);
     m_spriteEditor->onProjectOpened(path);
+    m_soundEditor->onProjectOpened(path);
     m_gamePreview->onProjectOpened(path);
     m_manifestEditor->onProjectOpened(path);
 
@@ -416,8 +425,9 @@ bool ThermoEditor::openProject(const fs::path& path) {
 
 void ThermoEditor::closeProject() {
     if (m_gamePreview) m_gamePreview->stopGame();
+    if (m_soundEditor) m_soundEditor->onProjectClosed();
     m_projectPath.clear();
-    if (m_codeEditor) m_codeEditor->closeAll();
+    if (m_codeEditor)  m_codeEditor->closeAll();
     log("Project closed.");
 }
 
@@ -499,6 +509,7 @@ void ThermoEditor::drawMenuBar() {
     if (ImGui::BeginMenu("View")) {
         if (m_codeEditor)     m_codeEditor->drawMenuItem();
         if (m_spriteEditor)   m_spriteEditor->drawMenuItem();
+        if (m_soundEditor)    m_soundEditor->drawMenuItem();
         if (m_fileBrowser)    m_fileBrowser->drawMenuItem();
         if (m_gamePreview)    m_gamePreview->drawMenuItem();
         if (m_console)        m_console->drawMenuItem();
