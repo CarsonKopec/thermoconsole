@@ -68,11 +68,18 @@ private:
         ViewMode                   mode     = ViewMode::Edit;
 
         // Undo / redo — full-text snapshots. Capped at kMaxUndo to bound memory.
+        // (Currently dormant: the in-editor edit pane is gone, so the stacks
+        // never grow. Kept so we can resurrect inline editing later if needed.)
         std::vector<std::string>   undoStack;
         std::vector<std::string>   redoStack;
         double                     lastSnapshotTime = 0.0;  // ImGui::GetTime()
 
         FindState                  find;
+
+        // External-save watcher: when VS Code saves the file, mtime changes
+        // and we re-read it from disk on the next poll, then trigger live
+        // reload through ThermoEditor::notifySourceSaved().
+        fs::file_time_type         lastDiskMtime {};
 
         bool load();
         bool save();
@@ -103,6 +110,10 @@ private:
     void captureSnapshot(FileBuffer& buf, std::string preEdit);
     void rebuildFindMatches(FileBuffer& buf);    // rerun search across text
     void jumpToMatch(FileBuffer& buf, int which); // focus a specific match
+
+    // Per-frame external-save watcher: re-read each open buffer if its mtime
+    // changed under us (VS Code saved it).
+    void pollExternalSaves();
 
     // Tokenizer (used only in preview mode)
     enum class TokenType {

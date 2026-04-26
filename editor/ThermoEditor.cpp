@@ -441,6 +441,45 @@ void ThermoEditor::notifySourceSaved() {
     if (m_gamePreview) m_gamePreview->onSourceSaved();
 }
 
+// ─── External editor (Unity-style: VS Code handles real editing) ────────────
+//
+// We use std::system() because it's the simplest portable "fire and forget".
+// On Windows it spawns cmd.exe momentarily — visible flash — but the spawned
+// `code` process detaches via `start`, so we don't block.
+//
+// Path quoting: we wrap the path in double quotes; `code` and the shells we
+// hand off to handle that. Paths with embedded double-quotes are exotic enough
+// for a local editor that we don't try to escape them; the spawn just fails.
+
+void ThermoEditor::openInExternalEditor(const fs::path& path, int line) {
+    std::string p = path.string();
+    if (p.find('"') != std::string::npos) {
+        log("Refusing to open path with embedded quotes: " + p, true);
+        return;
+    }
+
+    std::string target = '"' + p + '"';
+    std::string lineArg;
+    if (line > 0) lineArg = " -g \"" + p + ":" + std::to_string(line) + "\"";
+
+    std::string cmd;
+#ifdef _WIN32
+    // `start "" <prog> <args>` detaches; the empty title is required because
+    // `start` interprets a quoted first arg as a window title.
+    if (line > 0) cmd = "start \"\" code" + lineArg;
+    else          cmd = "start \"\" code "  + target;
+#else
+    if (line > 0) cmd = "code" + lineArg + " >/dev/null 2>&1 &";
+    else          cmd = "code "  + target + " >/dev/null 2>&1 &";
+#endif
+
+    int rc = std::system(cmd.c_str());
+    if (rc != 0) {
+        log("Failed to launch VS Code (rc=" + std::to_string(rc)
+            + "). Make sure `code` is on your PATH.", true);
+    }
+}
+
 // ─── Menu bar ───────────────────────────────────────────────────────────────
 
 void ThermoEditor::drawMenuBar() {
@@ -450,13 +489,9 @@ void ThermoEditor::drawMenuBar() {
         if (ImGui::MenuItem("Open Project...", "Ctrl+O")) m_wantOpenDialog = true;
         if (ImGui::MenuItem("Close Project", nullptr, false, hasProject())) closeProject();
         ImGui::Separator();
-        if (ImGui::MenuItem("Save File", "Ctrl+S", false, hasProject())) {
-            if (m_codeEditor) m_codeEditor->saveCurrentFile();
-        }
-        if (ImGui::MenuItem("Save All", "Ctrl+Shift+S", false, hasProject())) {
-            if (m_codeEditor) m_codeEditor->saveAll();
-        }
-        ImGui::Separator();
+        // Code editing happens in VS Code (Unity-style) — no Save File / Save
+        // All here. The Manifest panel saves itself; saves in VS Code are
+        // auto-detected by the watcher and trigger live-reload.
         if (ImGui::MenuItem("Quit", "Ctrl+Q")) m_running = false;
         ImGui::EndMenu();
     }
@@ -654,29 +689,10 @@ void ThermoEditor::handleShortcuts() {
             m_running = false;
     }
 
-    // Ctrl+S works even while the code editor has focus — saving should not
-    // be swallowed by the text widget.
-    if (ctrl && ImGui::IsKeyPressed(ImGuiKey_S, false)) {
-        if (m_codeEditor) {
-            if (shift) m_codeEditor->saveAll();
-            else       m_codeEditor->saveCurrentFile();
-        }
-    }
-
-    // Ctrl+F — toggle find bar in the active code buffer (works while typing)
+    // Ctrl+F — toggle find bar in the active code buffer (read-only preview
+    // still benefits from search). Works regardless of focus.
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_F, false)) {
         if (m_codeEditor) m_codeEditor->toggleFind();
-    }
-
-    // Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z — undo/redo on the active code buffer.
-    // InputTextMultiline has its own intra-widget undo; our stack augments it
-    // with whole-buffer restore points per edit-burst.
-    if (ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
-        if (m_codeEditor) m_codeEditor->undo();
-    }
-    if (ctrl && (ImGui::IsKeyPressed(ImGuiKey_Y, false) ||
-                 (shift && ImGui::IsKeyPressed(ImGuiKey_Z, false)))) {
-        if (m_codeEditor) m_codeEditor->redo();
     }
 
     // Ctrl+Tab / Ctrl+Shift+Tab — cycle open code tabs
