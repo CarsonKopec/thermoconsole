@@ -193,7 +193,8 @@ void FileBrowser::drawNode(Node& n, const std::string& filterLower) {
     // Right-click context menu
     if (ImGui::BeginPopupContextItem()) {
         if (!n.isDir) {
-            if (ImGui::MenuItem("Open")) m_editor->openFile(n.path);
+            if (ImGui::MenuItem("Open"))            m_editor->openFile(n.path);
+            if (ImGui::MenuItem("Open in VS Code")) m_editor->openInExternalEditor(n.path);
             ImGui::Separator();
             if (ImGui::MenuItem("Rename...")) {
                 m_renameTarget = n.path;

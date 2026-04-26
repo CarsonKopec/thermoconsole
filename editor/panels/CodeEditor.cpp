@@ -63,6 +63,11 @@ bool CodeEditor::FileBuffer::load() {
     for (char c : raw) if (c != '\r') out += c;
     text = std::move(out);
     modified = false;
+
+    // Snapshot mtime so the watcher only re-reads on subsequent changes.
+    std::error_code ec;
+    auto t = fs::last_write_time(path, ec);
+    if (!ec) lastDiskMtime = t;
     return true;
 }
 
@@ -254,6 +259,32 @@ void CodeEditor::rebuildFindMatches(FileBuffer& buf) {
     if (!buf.find.matches.empty()) jumpToMatch(buf, 0);
 }
 
+// External-save watcher: when VS Code writes to a file we've got open, the
+// mtime changes. Re-read into the buffer on the next frame and notify
+// GamePreview so live-reload kicks in just like an in-editor save did.
+void CodeEditor::pollExternalSaves() {
+    bool anyReloaded = false;
+    for (auto& buf : m_buffers) {
+        if (buf.path.empty()) continue;
+        std::error_code ec;
+        auto t = fs::last_write_time(buf.path, ec);
+        if (ec) continue;
+        if (t == buf.lastDiskMtime) continue;
+        // Disk mtime changed under us. Re-read.
+        if (buf.load()) {
+            // Find matches go stale on text change — recompute if the bar's open.
+            if (buf.find.active) rebuildFindMatches(buf);
+            anyReloaded = true;
+            m_editor->log("Reloaded from disk: " + buf.path.filename().string());
+        } else {
+            buf.lastDiskMtime = t;   // avoid retry-loop on a transiently-missing file
+            m_editor->log("External save detected but reload failed: "
+                          + buf.path.string(), true);
+        }
+    }
+    if (anyReloaded) m_editor->notifySourceSaved();
+}
+
 void CodeEditor::jumpToMatch(FileBuffer& buf, int which) {
     if (buf.find.matches.empty()) return;
     int n = (int)buf.find.matches.size();
@@ -272,6 +303,7 @@ void CodeEditor::drawMenuItem() {
 
 void CodeEditor::draw() {
     if (!m_visible) return;
+    pollExternalSaves();
     ImGui::Begin("Code Editor", &m_visible);
 
     if (m_buffers.empty()) {
@@ -328,11 +360,21 @@ void CodeEditor::draw() {
 }
 
 void CodeEditor::drawEditor(FileBuffer& buf) {
-    // ── Top toolbar: mode toggle ────────────────────────────────────────────
-    bool editMode = (buf.mode == ViewMode::Edit);
-    if (ImGui::SmallButton(editMode ? "Edit" : "Preview (read-only)")) {
-        buf.mode = editMode ? ViewMode::Preview : ViewMode::Edit;
-    }
+    // CodeEditor is preview-only — the user edits in VS Code. We force-display
+    // the syntax-highlighted preview here regardless of mode, so any legacy
+    // ImGui state from earlier sessions is ignored.
+    buf.mode = ViewMode::Preview;
+
+    // ── Top toolbar ─────────────────────────────────────────────────────────
+    ImGui::PushStyleColor(ImGuiCol_Button,        {0.20f, 0.45f, 0.85f, 1.f});
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, {0.30f, 0.60f, 1.00f, 1.f});
+    if (ImGui::SmallButton("Open in VS Code"))
+        m_editor->openInExternalEditor(buf.path);
+    ImGui::PopStyleColor(2);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Launches `code` (must be on PATH). Saves there are\n"
+                          "auto-detected and trigger the live-reload.");
+
     ImGui::SameLine();
     if (ImGui::SmallButton(buf.find.active ? "Close Find" : "Find (Ctrl+F)")) {
         buf.find.active = !buf.find.active;
@@ -342,7 +384,7 @@ void CodeEditor::drawEditor(FileBuffer& buf) {
         }
     }
     ImGui::SameLine();
-    ImGui::TextDisabled("  Ctrl+Z undo  /  Ctrl+Y redo  /  Ctrl+Tab next");
+    ImGui::TextDisabled("  Read-only preview — Ctrl+Tab to switch tabs");
 
     ImGui::Separator();
 
@@ -356,8 +398,7 @@ void CodeEditor::drawEditor(FileBuffer& buf) {
     ImGui::BeginChild("##editor_pane", paneSize, false,
                       ImGuiWindowFlags_HorizontalScrollbar);
 
-    if (buf.mode == ViewMode::Edit) drawEditPane(buf);
-    else                            drawPreviewPane(buf);
+    drawPreviewPane(buf);
 
     ImGui::EndChild();
 
@@ -366,9 +407,8 @@ void CodeEditor::drawEditor(FileBuffer& buf) {
     size_t lines = static_cast<size_t>(
                    std::count(buf.text.begin(), buf.text.end(), '\n')) + 1;
     size_t bytes = buf.text.size();
-    ImGui::TextDisabled(" %s   |   %zu lines   |   %zu bytes   |   Lua   |   %s",
-                        buf.path.string().c_str(), lines, bytes,
-                        buf.modified ? "modified" : "clean");
+    ImGui::TextDisabled(" %s   |   %zu lines   |   %zu bytes   |   Lua",
+                        buf.path.string().c_str(), lines, bytes);
 }
 
 // ── Find bar (shared by edit + preview) ─────────────────────────────────────

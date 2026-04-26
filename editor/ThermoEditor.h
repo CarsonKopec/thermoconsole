@@ -111,6 +111,11 @@ public:
     // auto-reload is enabled.
     void notifySourceSaved();
 
+    // Spawn the configured external editor (default: VS Code via `code`) on
+    // a path. If line > 0 the editor is jumped to that line. Fire-and-forget;
+    // logs an error if the spawn fails (typically: `code` not on PATH).
+    void openInExternalEditor(const fs::path& path, int line = 0);
+
     // SDL accessors
     SDL_Window*   window()    { return m_window;    }
     SDL_GLContext glContext() { return m_glContext; }
