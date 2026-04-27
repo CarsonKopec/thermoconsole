@@ -222,6 +222,10 @@ const char* input_button_name(int id);
 int audio_init(void);
 void audio_shutdown(void);
 void audio_sfx(const char* name, int channel, bool loop);
+/* Synthesised SFX from <rom>/sounds.json (PICO-8-style). Loaded by main.c
+ * after the ROM mounts. Callable from Lua via sfx(int_id, ...). */
+void audio_load_chiptune(const char* rom_base_path);
+void audio_sfx_id(int sfx_id, int channel, bool loop);
 void audio_music(const char* name, bool loop);
 void audio_stop(int channel);
 void audio_volume(float level, int channel);

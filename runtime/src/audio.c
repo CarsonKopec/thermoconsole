@@ -9,6 +9,7 @@
 #include <SDL.h>
 #include <SDL_mixer.h>
 #include "thermo.h"
+#include "chiptune.h"
 
 /* Sound effect cache */
 typedef struct {
@@ -18,6 +19,11 @@ typedef struct {
 
 static SfxEntry sfx_cache[128];
 static int sfx_cache_count = 0;
+
+/* Synthesised SFX from sounds.json. Loaded once after the ROM is mounted
+ * via audio_load_chiptune(); freed in audio_shutdown(). When .loaded is
+ * 0 (no sounds.json present, or parse failed), audio_sfx_id() is a no-op. */
+static Chiptune g_chiptune;
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * Initialization
@@ -45,13 +51,25 @@ void audio_shutdown(void) {
         }
     }
     sfx_cache_count = 0;
-    
+
+    /* Free synthesised chiptune (no-op if never loaded). */
+    chiptune_free(&g_chiptune);
+
     /* Free music */
     ThermoAudio* audio = &g_thermo->audio;
     if (audio->music) {
         Mix_FreeMusic(audio->music);
         audio->music = NULL;
     }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Chiptune lifecycle (called from main.c after rom_load)
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+void audio_load_chiptune(const char* rom_base_path) {
+    chiptune_free(&g_chiptune);
+    chiptune_load(&g_chiptune, rom_base_path, THERMO_SAMPLE_RATE);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -103,15 +121,22 @@ static Mix_Chunk* load_sfx(const char* name) {
 void audio_sfx(const char* name, int channel, bool loop) {
     Mix_Chunk* chunk = load_sfx(name);
     if (!chunk) return;
-    
+
     int loops = loop ? -1 : 0;
-    
+
     if (channel < 0) {
         /* Auto-select channel */
         Mix_PlayChannel(-1, chunk, loops);
     } else if (channel < THERMO_AUDIO_CHANNELS) {
         Mix_PlayChannel(channel, chunk, loops);
     }
+}
+
+/* Play a synthesised SFX by sounds.json slot id. No-op when no sounds.json
+ * was loaded for this ROM, so games fall back to silent rather than crash. */
+void audio_sfx_id(int sfx_id, int channel, bool loop) {
+    if (channel >= THERMO_AUDIO_CHANNELS) return;
+    chiptune_play(&g_chiptune, sfx_id, channel, loop);
 }
 
 void audio_music(const char* name, bool loop) {

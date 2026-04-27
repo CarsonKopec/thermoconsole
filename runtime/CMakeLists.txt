@@ -165,7 +165,7 @@ elseif(THERMO_PICO_AUDIO)
     add_definitions(-DTHERMO_PICO_AUDIO)
 else()
     message(STATUS "Audio: SDL_mixer")
-    list(APPEND THERMO_SOURCES src/audio.c)
+    list(APPEND THERMO_SOURCES src/audio.c src/chiptune.c)
 endif()
 
 if(THERMO_BUILD_PI)

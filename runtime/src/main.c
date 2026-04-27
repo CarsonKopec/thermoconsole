@@ -165,12 +165,16 @@ int thermo_init(const char* rom_path) {
                    g_thermo->rom->sprites.grid_size);
         }
         
+        /* Load chiptune SFX (sounds.json from the SoundEditor). Silent
+         * fall-through if the ROM ships without one. */
+        audio_load_chiptune(g_thermo->rom->base_path);
+
         /* Initialize script */
         char entry_path[512];
         snprintf(entry_path, sizeof(entry_path), "%s/%s",
                  g_thermo->rom->base_path,
                  g_thermo->rom->manifest.entry);
-        
+
         if (script_init(entry_path) < 0) {
             fprintf(stderr, "ERROR: Failed to initialize script\n");
             return -1;
