@@ -184,11 +184,20 @@ static int l_btnp(lua_State* L) {
  * Audio API
  * ───────────────────────────────────────────────────────────────────────────── */
 
+/* sfx() accepts either:
+ *   sfx(integer_id [, channel [, loop]])  → synthesised slot from sounds.json
+ *   sfx("name"     [, channel [, loop]])  → file-based <rom>/sfx/<name>.wav
+ * The integer overload is what the SoundEditor produces; the string form
+ * is the legacy file-loading path. */
 static int l_sfx(lua_State* L) {
-    const char* name = luaL_checkstring(L, 1);
-    int channel = luaL_optinteger(L, 2, -1);
-    bool loop = lua_toboolean(L, 3);
-    audio_sfx(name, channel, loop);
+    int  channel = luaL_optinteger(L, 2, -1);
+    bool loop    = lua_toboolean(L, 3);
+    if (lua_type(L, 1) == LUA_TNUMBER) {
+        audio_sfx_id((int)lua_tointeger(L, 1), channel, loop);
+    } else {
+        const char* name = luaL_checkstring(L, 1);
+        audio_sfx(name, channel, loop);
+    }
     return 0;
 }
 

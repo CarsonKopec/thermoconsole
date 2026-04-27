@@ -95,10 +95,15 @@ end
 
 function update_title()
     flash_timer = flash_timer + 1
-    
+
     if btnp(4) or btnp(8) then  -- A or Start
+        sfx(6)                  -- menu confirm pip
         state = "playing"
         reset_game()
+        -- Music bed: ambient bass on channel 0, groove arp on channel 1.
+        -- Both loop until game_over stops them.
+        sfx(8, 0, true)
+        sfx(9, 1, true)
     end
 end
 
@@ -110,6 +115,7 @@ function update_playing()
     
     -- Pause
     if btnp(8) then  -- Start
+        sfx(6)
         state = "paused"
         return
     end
@@ -164,14 +170,16 @@ end
 
 function update_paused()
     if btnp(8) then  -- Start
+        sfx(6)
         state = "playing"
     end
 end
 
 function update_gameover()
     flash_timer = flash_timer + 1
-    
+
     if btnp(4) or btnp(8) then  -- A or Start
+        sfx(6)
         state = "title"
     end
 end
@@ -209,6 +217,8 @@ function spawn_asteroid()
 end
 
 function hit_player()
+    sfx(3)  -- noise crash with pitch drop
+
     -- Spawn explosion particles
     for i = 1, 20 do
         local angle = rnd(1)
@@ -234,7 +244,12 @@ end
 function game_over()
     state = "gameover"
     flash_timer = 0
-    
+
+    -- Cut the music bed and play the dirge.
+    stop(0)   -- ambient channel
+    stop(1)   -- groove channel
+    sfx(7)    -- game_over
+
     -- Update high score
     if score > high_score then
         high_score = score
