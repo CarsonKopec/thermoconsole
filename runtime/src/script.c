@@ -45,15 +45,21 @@ int script_init(const char* entry_path) {
     /* Register ThermoConsole API */
     lua_api_register(script->L);
     
-    /* Set package path to include ROM directory */
+    /* Set package path to include ROM directory.
+     *
+     * Use Lua long-bracket strings ([[ ... ]]) so backslashes in absolute
+     * Windows paths (e.g. C:\Users\...) aren't interpreted as Lua escape
+     * sequences (\U, \k, etc. are invalid). Long-bracket strings only
+     * "fail" if the path itself contains "]]", which is effectively
+     * impossible for a filesystem path. */
     if (g_thermo->rom && g_thermo->rom->base_path) {
         char path_code[1024];
         snprintf(path_code, sizeof(path_code),
-            "package.path = package.path .. ';%s/?.lua;%s/scripts/?.lua'",
+            "package.path = package.path .. [[;%s/?.lua;%s/scripts/?.lua]]",
             g_thermo->rom->base_path,
             g_thermo->rom->base_path
         );
-        
+
         if (luaL_dostring(script->L, path_code) != LUA_OK) {
             print_lua_error(script->L, "setting package.path");
         }
