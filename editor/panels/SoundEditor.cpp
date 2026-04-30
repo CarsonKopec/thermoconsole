@@ -267,6 +267,11 @@ void SoundEditor::fillAudioBuffer(int16_t* out, int sampleCount) {
     const double stepSec  = std::max(1, (int)sfx.speed) * tickSec;
     const double stepDur  = stepSec * m_sampleRate;           // samples / step
 
+    // 1 ms attack + release on every step — matches runtime/src/chiptune.c.
+    // Without it, hard volume edges between steps click; stacked, that reads
+    // as harshness.
+    const double edgeSamples = 0.001 * m_sampleRate;
+
     for (int i = 0; i < sampleCount; ++i) {
         // End of pattern? Either loop or stop.
         if (m_playStepIdx >= kSteps) {
@@ -312,8 +317,14 @@ void SoundEditor::fillAudioBuffer(int16_t* out, int sampleCount) {
             ? 0.0
             : waveformSample((Wave)step.wave, m_oscPhase, m_noiseState) * vol;
 
-        // 0.6 amplitude headroom keeps two layered waves from clipping.
-        int v = (int)(sample * 0.6 * 32767.0);
+        // Step-edge envelope (anti-click) — matches the runtime synth.
+        double local     = m_playStepFrac * stepDur;
+        double remaining = stepDur - local;
+        if (local     < edgeSamples) sample *= local     / edgeSamples;
+        if (remaining < edgeSamples) sample *= remaining / edgeSamples;
+
+        // 0.30 headroom keeps multiple stacked channels from clipping.
+        int v = (int)(sample * 0.30 * 32767.0);
         out[i] = (int16_t)std::clamp(v, -32768, 32767);
 
         m_oscPhase += freq / m_sampleRate;

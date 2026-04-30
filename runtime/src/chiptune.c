@@ -274,6 +274,10 @@ static int render_sfx(const ChiptuneSfx* sfx, int sample_rate,
     double   osc_phase   = 0.0;
     uint32_t noise_state = 0xCAFEBABEu;
 
+    /* 1 ms attack + release on every step. Without this, hard volume edges
+     * between steps emit clicks that read as harshness when stacked. */
+    const double edge_samples = 0.001 * sample_rate;
+
     for (size_t i = 0; i < mono_samples; ++i) {
         double whole_step = (double)i / samples_per_step;
         int    si         = (int)whole_step;
@@ -312,7 +316,16 @@ static int render_sfx(const ChiptuneSfx* sfx, int sample_rate,
             ? 0.0
             : waveform_sample(st->wave, osc_phase, &noise_state) * vol;
 
-        int v = (int)(sample * 0.6 * 32767.0);
+        /* Step-edge envelope (anti-click). */
+        double local     = frac * samples_per_step;
+        double remaining = samples_per_step - local;
+        if (local     < edge_samples) sample *= local     / edge_samples;
+        if (remaining < edge_samples) sample *= remaining / edge_samples;
+
+        /* 0.30 headroom (was 0.60). With up to 4 mixer channels stacking
+         * we'd otherwise clip at peak; lower amplitude is closer to PICO-8's
+         * gentle character anyway. */
+        int v = (int)(sample * 0.30 * 32767.0);
         if (v < -32768) v = -32768;
         if (v >  32767) v =  32767;
         out[i * 2 + 0] = (int16_t)v;
