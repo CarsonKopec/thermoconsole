@@ -1658,7 +1658,7 @@
       "name": "ambient",
       "speed": 30,
       "loop_start": 0,
-      "loop_end": 16,
+      "loop_end": 32,
       "steps": [
         {
           "pitch": 0,
@@ -1709,7 +1709,97 @@
           "effect": 2
         },
         {
-          "pitch": 7,
+          "pitch": 8,
+          "wave": 0,
+          "volume": 4,
+          "effect": 2
+        },
+        {
+          "pitch": 8,
+          "wave": 0,
+          "volume": 4,
+          "effect": 2
+        },
+        {
+          "pitch": 8,
+          "wave": 0,
+          "volume": 4,
+          "effect": 2
+        },
+        {
+          "pitch": 8,
+          "wave": 0,
+          "volume": 4,
+          "effect": 2
+        },
+        {
+          "pitch": 8,
+          "wave": 0,
+          "volume": 4,
+          "effect": 2
+        },
+        {
+          "pitch": 8,
+          "wave": 0,
+          "volume": 4,
+          "effect": 2
+        },
+        {
+          "pitch": 8,
+          "wave": 0,
+          "volume": 4,
+          "effect": 2
+        },
+        {
+          "pitch": 8,
+          "wave": 0,
+          "volume": 4,
+          "effect": 2
+        },
+        {
+          "pitch": 3,
+          "wave": 0,
+          "volume": 4,
+          "effect": 2
+        },
+        {
+          "pitch": 3,
+          "wave": 0,
+          "volume": 4,
+          "effect": 2
+        },
+        {
+          "pitch": 3,
+          "wave": 0,
+          "volume": 4,
+          "effect": 2
+        },
+        {
+          "pitch": 3,
+          "wave": 0,
+          "volume": 4,
+          "effect": 2
+        },
+        {
+          "pitch": 3,
+          "wave": 0,
+          "volume": 4,
+          "effect": 2
+        },
+        {
+          "pitch": 3,
+          "wave": 0,
+          "volume": 4,
+          "effect": 2
+        },
+        {
+          "pitch": 3,
+          "wave": 0,
+          "volume": 4,
+          "effect": 2
+        },
+        {
+          "pitch": 3,
           "wave": 0,
           "volume": 4,
           "effect": 2
@@ -1757,100 +1847,10 @@
           "effect": 2
         },
         {
-          "pitch": 24,
+          "pitch": 7,
           "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
+          "volume": 4,
+          "effect": 2
         }
       ]
     },
@@ -1859,7 +1859,7 @@
       "name": "groove",
       "speed": 15,
       "loop_start": 0,
-      "loop_end": 8,
+      "loop_end": 32,
       "steps": [
         {
           "pitch": 36,
@@ -1877,10 +1877,124 @@
           "pitch": 43,
           "wave": 3,
           "volume": 4,
-          "effect": 1
+          "effect": 0
         },
         {
           "pitch": 41,
+          "wave": 3,
+          "volume": 4,
+          "effect": 1
+        },
+        {
+          "pitch": 43,
+          "wave": 3,
+          "volume": 4,
+          "effect": 0
+        },
+        {
+          "pitch": 46,
+          "wave": 3,
+          "volume": 4,
+          "effect": 1
+        },
+        {
+          "pitch": 43,
+          "wave": 3,
+          "volume": 4,
+          "effect": 0
+        },
+        {
+          "pitch": 41,
+          "wave": 3,
+          "volume": 4,
+          "effect": 1
+        },
+        {
+          "pitch": 39,
+          "wave": 3,
+          "volume": 4,
+          "effect": 0
+        },
+        {
+          "pitch": 36,
+          "wave": 3,
+          "volume": 4,
+          "effect": 1
+        },
+        {
+          "pitch": 44,
+          "wave": 3,
+          "volume": 4,
+          "effect": 0
+        },
+        {
+          "pitch": 36,
+          "wave": 3,
+          "volume": 4,
+          "effect": 1
+        },
+        {
+          "pitch": 39,
+          "wave": 3,
+          "volume": 4,
+          "effect": 0
+        },
+        {
+          "pitch": 41,
+          "wave": 3,
+          "volume": 4,
+          "effect": 1
+        },
+        {
+          "pitch": 43,
+          "wave": 3,
+          "volume": 4,
+          "effect": 0
+        },
+        {
+          "pitch": 39,
+          "wave": 3,
+          "volume": 4,
+          "effect": 1
+        },
+        {
+          "pitch": 43,
+          "wave": 3,
+          "volume": 4,
+          "effect": 0
+        },
+        {
+          "pitch": 41,
+          "wave": 3,
+          "volume": 4,
+          "effect": 1
+        },
+        {
+          "pitch": 39,
+          "wave": 3,
+          "volume": 4,
+          "effect": 0
+        },
+        {
+          "pitch": 38,
+          "wave": 3,
+          "volume": 4,
+          "effect": 1
+        },
+        {
+          "pitch": 39,
+          "wave": 3,
+          "volume": 4,
+          "effect": 0
+        },
+        {
+          "pitch": 43,
+          "wave": 3,
+          "volume": 4,
+          "effect": 1
+        },
+        {
+          "pitch": 46,
           "wave": 3,
           "volume": 4,
           "effect": 0
@@ -1898,160 +2012,46 @@
           "effect": 0
         },
         {
+          "pitch": 38,
+          "wave": 3,
+          "volume": 4,
+          "effect": 1
+        },
+        {
+          "pitch": 43,
+          "wave": 3,
+          "volume": 4,
+          "effect": 0
+        },
+        {
+          "pitch": 41,
+          "wave": 3,
+          "volume": 4,
+          "effect": 1
+        },
+        {
           "pitch": 39,
           "wave": 3,
           "volume": 4,
           "effect": 0
         },
         {
-          "pitch": 36,
+          "pitch": 38,
           "wave": 3,
           "volume": 4,
           "effect": 1
         },
         {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
+          "pitch": 36,
+          "wave": 3,
+          "volume": 4,
           "effect": 0
         },
         {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
+          "pitch": 38,
+          "wave": 3,
+          "volume": 4,
+          "effect": 1
         }
       ]
     },
