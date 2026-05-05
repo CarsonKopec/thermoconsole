@@ -53,25 +53,25 @@
       "loop_end": 0,
       "steps": [
         {
-          "pitch": 48,
+          "pitch": 24,
           "wave": 1,
           "volume": 6,
           "effect": 0
         },
         {
-          "pitch": 53,
+          "pitch": 28,
           "wave": 1,
           "volume": 6,
           "effect": 0
         },
         {
-          "pitch": 57,
+          "pitch": 31,
           "wave": 1,
           "volume": 6,
           "effect": 0
         },
         {
-          "pitch": 60,
+          "pitch": 36,
           "wave": 1,
           "volume": 5,
           "effect": 5
@@ -254,27 +254,27 @@
       "loop_end": 0,
       "steps": [
         {
-          "pitch": 62,
+          "pitch": 50,
           "wave": 2,
           "volume": 6,
           "effect": 0
         },
         {
-          "pitch": 54,
+          "pitch": 38,
           "wave": 2,
           "volume": 6,
-          "effect": 0
+          "effect": 1
         },
         {
-          "pitch": 45,
+          "pitch": 26,
           "wave": 2,
           "volume": 5,
           "effect": 3
         },
         {
-          "pitch": 40,
+          "pitch": 14,
           "wave": 2,
-          "volume": 4,
+          "volume": 3,
           "effect": 5
         },
         {
@@ -455,15 +455,15 @@
       "loop_end": 0,
       "steps": [
         {
-          "pitch": 57,
+          "pitch": 36,
           "wave": 0,
-          "volume": 6,
+          "volume": 5,
           "effect": 0
         },
         {
-          "pitch": 64,
+          "pitch": 43,
           "wave": 0,
-          "volume": 6,
+          "volume": 5,
           "effect": 5
         },
         {
@@ -651,15 +651,15 @@
     {
       "id": 3,
       "name": "hit",
-      "speed": 4,
+      "speed": 3,
       "loop_start": 0,
       "loop_end": 0,
       "steps": [
         {
-          "pitch": 20,
+          "pitch": 12,
           "wave": 4,
           "volume": 7,
-          "effect": 3
+          "effect": 0
         },
         {
           "pitch": 12,
@@ -668,7 +668,7 @@
           "effect": 0
         },
         {
-          "pitch": 8,
+          "pitch": 12,
           "wave": 4,
           "volume": 3,
           "effect": 5
@@ -857,52 +857,52 @@
       "loop_end": 0,
       "steps": [
         {
-          "pitch": 57,
+          "pitch": 36,
           "wave": 2,
           "volume": 6,
           "effect": 0
         },
         {
-          "pitch": 53,
+          "pitch": 33,
           "wave": 2,
           "volume": 6,
           "effect": 0
         },
         {
-          "pitch": 50,
+          "pitch": 29,
           "wave": 2,
           "volume": 6,
           "effect": 0
         },
         {
-          "pitch": 48,
+          "pitch": 26,
           "wave": 2,
           "volume": 6,
-          "effect": 0
+          "effect": 1
         },
         {
-          "pitch": 45,
+          "pitch": 24,
           "wave": 2,
           "volume": 5,
-          "effect": 5
+          "effect": 0
         },
         {
-          "pitch": 45,
+          "pitch": 21,
           "wave": 2,
           "volume": 4,
           "effect": 5
         },
         {
-          "pitch": 45,
+          "pitch": 17,
           "wave": 2,
-          "volume": 2,
+          "volume": 3,
           "effect": 5
         },
         {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
+          "pitch": 12,
+          "wave": 2,
+          "volume": 2,
+          "effect": 5
         },
         {
           "pitch": 24,
@@ -1058,46 +1058,46 @@
       "loop_end": 0,
       "steps": [
         {
+          "pitch": 24,
+          "wave": 0,
+          "volume": 5,
+          "effect": 0
+        },
+        {
+          "pitch": 28,
+          "wave": 0,
+          "volume": 5,
+          "effect": 0
+        },
+        {
+          "pitch": 31,
+          "wave": 0,
+          "volume": 5,
+          "effect": 0
+        },
+        {
+          "pitch": 36,
+          "wave": 0,
+          "volume": 6,
+          "effect": 0
+        },
+        {
+          "pitch": 40,
+          "wave": 0,
+          "volume": 6,
+          "effect": 0
+        },
+        {
+          "pitch": 43,
+          "wave": 0,
+          "volume": 6,
+          "effect": 0
+        },
+        {
           "pitch": 48,
           "wave": 0,
           "volume": 6,
-          "effect": 0
-        },
-        {
-          "pitch": 52,
-          "wave": 0,
-          "volume": 6,
-          "effect": 0
-        },
-        {
-          "pitch": 55,
-          "wave": 0,
-          "volume": 6,
-          "effect": 0
-        },
-        {
-          "pitch": 60,
-          "wave": 0,
-          "volume": 6,
-          "effect": 0
-        },
-        {
-          "pitch": 64,
-          "wave": 0,
-          "volume": 5,
           "effect": 5
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
-        },
-        {
-          "pitch": 24,
-          "wave": 0,
-          "volume": 0,
-          "effect": 0
         },
         {
           "pitch": 24,
@@ -1254,18 +1254,18 @@
     {
       "id": 6,
       "name": "select",
-      "speed": 2,
+      "speed": 1,
       "loop_start": 0,
       "loop_end": 0,
       "steps": [
         {
-          "pitch": 60,
+          "pitch": 36,
           "wave": 3,
           "volume": 5,
           "effect": 0
         },
         {
-          "pitch": 57,
+          "pitch": 43,
           "wave": 3,
           "volume": 4,
           "effect": 5
@@ -1455,57 +1455,57 @@
     {
       "id": 7,
       "name": "game_over",
-      "speed": 8,
+      "speed": 10,
       "loop_start": 0,
       "loop_end": 0,
       "steps": [
         {
-          "pitch": 53,
+          "pitch": 36,
           "wave": 2,
           "volume": 6,
           "effect": 0
         },
         {
-          "pitch": 50,
+          "pitch": 34,
           "wave": 2,
           "volume": 6,
           "effect": 0
         },
         {
-          "pitch": 48,
+          "pitch": 31,
           "wave": 2,
           "volume": 6,
           "effect": 0
         },
         {
-          "pitch": 45,
-          "wave": 2,
-          "volume": 6,
-          "effect": 0
-        },
-        {
-          "pitch": 43,
-          "wave": 2,
-          "volume": 6,
-          "effect": 5
-        },
-        {
-          "pitch": 41,
+          "pitch": 29,
           "wave": 2,
           "volume": 5,
           "effect": 5
         },
         {
-          "pitch": 38,
+          "pitch": 27,
           "wave": 2,
           "volume": 4,
           "effect": 5
         },
         {
-          "pitch": 36,
+          "pitch": 24,
           "wave": 2,
           "volume": 3,
           "effect": 5
+        },
+        {
+          "pitch": 24,
+          "wave": 0,
+          "volume": 0,
+          "effect": 0
+        },
+        {
+          "pitch": 24,
+          "wave": 0,
+          "volume": 0,
+          "effect": 0
         },
         {
           "pitch": 24,
@@ -1658,103 +1658,103 @@
       "name": "ambient",
       "speed": 8,
       "loop_start": 0,
-      "loop_end": 4,
+      "loop_end": 16,
       "steps": [
         {
-          "pitch": 36,
+          "pitch": 0,
           "wave": 0,
           "volume": 4,
-          "effect": 0
+          "effect": 2
         },
         {
-          "pitch": 36,
-          "wave": 0,
-          "volume": 3,
-          "effect": 0
-        },
-        {
-          "pitch": 39,
+          "pitch": 0,
           "wave": 0,
           "volume": 4,
-          "effect": 0
+          "effect": 2
         },
         {
-          "pitch": 39,
+          "pitch": 0,
           "wave": 0,
-          "volume": 3,
-          "effect": 0
+          "volume": 4,
+          "effect": 2
         },
         {
-          "pitch": 24,
+          "pitch": 0,
           "wave": 0,
-          "volume": 0,
-          "effect": 0
+          "volume": 4,
+          "effect": 2
         },
         {
-          "pitch": 24,
+          "pitch": 0,
           "wave": 0,
-          "volume": 0,
-          "effect": 0
+          "volume": 4,
+          "effect": 2
         },
         {
-          "pitch": 24,
+          "pitch": 0,
           "wave": 0,
-          "volume": 0,
-          "effect": 0
+          "volume": 4,
+          "effect": 2
         },
         {
-          "pitch": 24,
+          "pitch": 0,
           "wave": 0,
-          "volume": 0,
-          "effect": 0
+          "volume": 4,
+          "effect": 2
         },
         {
-          "pitch": 24,
+          "pitch": 0,
           "wave": 0,
-          "volume": 0,
-          "effect": 0
+          "volume": 4,
+          "effect": 2
         },
         {
-          "pitch": 24,
+          "pitch": 7,
           "wave": 0,
-          "volume": 0,
-          "effect": 0
+          "volume": 4,
+          "effect": 2
         },
         {
-          "pitch": 24,
+          "pitch": 7,
           "wave": 0,
-          "volume": 0,
-          "effect": 0
+          "volume": 4,
+          "effect": 2
         },
         {
-          "pitch": 24,
+          "pitch": 7,
           "wave": 0,
-          "volume": 0,
-          "effect": 0
+          "volume": 4,
+          "effect": 2
         },
         {
-          "pitch": 24,
+          "pitch": 7,
           "wave": 0,
-          "volume": 0,
-          "effect": 0
+          "volume": 4,
+          "effect": 2
         },
         {
-          "pitch": 24,
+          "pitch": 7,
           "wave": 0,
-          "volume": 0,
-          "effect": 0
+          "volume": 4,
+          "effect": 2
         },
         {
-          "pitch": 24,
+          "pitch": 7,
           "wave": 0,
-          "volume": 0,
-          "effect": 0
+          "volume": 4,
+          "effect": 2
         },
         {
-          "pitch": 24,
+          "pitch": 7,
           "wave": 0,
-          "volume": 0,
-          "effect": 0
+          "volume": 4,
+          "effect": 2
+        },
+        {
+          "pitch": 7,
+          "wave": 0,
+          "volume": 4,
+          "effect": 2
         },
         {
           "pitch": 24,
@@ -1862,52 +1862,52 @@
       "loop_end": 8,
       "steps": [
         {
-          "pitch": 48,
-          "wave": 1,
-          "volume": 5,
+          "pitch": 36,
+          "wave": 3,
+          "volume": 4,
           "effect": 0
         },
         {
-          "pitch": 55,
-          "wave": 1,
-          "volume": 5,
+          "pitch": 39,
+          "wave": 3,
+          "volume": 4,
+          "effect": 1
+        },
+        {
+          "pitch": 43,
+          "wave": 3,
+          "volume": 4,
+          "effect": 1
+        },
+        {
+          "pitch": 41,
+          "wave": 3,
+          "volume": 4,
           "effect": 0
         },
         {
-          "pitch": 51,
-          "wave": 1,
-          "volume": 5,
+          "pitch": 43,
+          "wave": 3,
+          "volume": 4,
+          "effect": 1
+        },
+        {
+          "pitch": 41,
+          "wave": 3,
+          "volume": 4,
           "effect": 0
         },
         {
-          "pitch": 55,
-          "wave": 1,
-          "volume": 5,
+          "pitch": 39,
+          "wave": 3,
+          "volume": 4,
           "effect": 0
         },
         {
-          "pitch": 50,
-          "wave": 1,
-          "volume": 5,
-          "effect": 0
-        },
-        {
-          "pitch": 58,
-          "wave": 1,
-          "volume": 5,
-          "effect": 0
-        },
-        {
-          "pitch": 53,
-          "wave": 1,
-          "volume": 5,
-          "effect": 0
-        },
-        {
-          "pitch": 58,
-          "wave": 1,
-          "volume": 5,
-          "effect": 0
+          "pitch": 36,
+          "wave": 3,
+          "volume": 4,
+          "effect": 1
         },
         {
           "pitch": 24,
