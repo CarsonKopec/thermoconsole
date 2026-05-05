@@ -48,7 +48,7 @@
     {
       "id": 0,
       "name": "jump",
-      "speed": 2,
+      "speed": 4,
       "loop_start": 0,
       "loop_end": 0,
       "steps": [
@@ -249,7 +249,7 @@
     {
       "id": 1,
       "name": "laser",
-      "speed": 1,
+      "speed": 2,
       "loop_start": 0,
       "loop_end": 0,
       "steps": [
@@ -450,7 +450,7 @@
     {
       "id": 2,
       "name": "coin",
-      "speed": 3,
+      "speed": 6,
       "loop_start": 0,
       "loop_end": 0,
       "steps": [
@@ -651,7 +651,7 @@
     {
       "id": 3,
       "name": "hit",
-      "speed": 3,
+      "speed": 6,
       "loop_start": 0,
       "loop_end": 0,
       "steps": [
@@ -852,7 +852,7 @@
     {
       "id": 4,
       "name": "death",
-      "speed": 6,
+      "speed": 12,
       "loop_start": 0,
       "loop_end": 0,
       "steps": [
@@ -1053,7 +1053,7 @@
     {
       "id": 5,
       "name": "powerup",
-      "speed": 3,
+      "speed": 6,
       "loop_start": 0,
       "loop_end": 0,
       "steps": [
@@ -1254,7 +1254,7 @@
     {
       "id": 6,
       "name": "select",
-      "speed": 1,
+      "speed": 3,
       "loop_start": 0,
       "loop_end": 0,
       "steps": [
@@ -1455,7 +1455,7 @@
     {
       "id": 7,
       "name": "game_over",
-      "speed": 10,
+      "speed": 20,
       "loop_start": 0,
       "loop_end": 0,
       "steps": [
@@ -1656,7 +1656,7 @@
     {
       "id": 8,
       "name": "ambient",
-      "speed": 8,
+      "speed": 30,
       "loop_start": 0,
       "loop_end": 16,
       "steps": [
@@ -1857,7 +1857,7 @@
     {
       "id": 9,
       "name": "groove",
-      "speed": 4,
+      "speed": 15,
       "loop_start": 0,
       "loop_end": 8,
       "steps": [
