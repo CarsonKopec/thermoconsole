@@ -143,6 +143,7 @@ private:
     void drawToolbar();
     void drawSfxList();
     void drawPalette();
-    void drawGrid();
+    void drawPianoRoll();      // FL-Studio-style: keyboard sidebar + grid
+    void drawVelocityStrip();  // per-step volume bars beneath the roll
     void drawStepInspector();
 };

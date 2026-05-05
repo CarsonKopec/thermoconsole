@@ -59,16 +59,23 @@ double waveformSample(SoundEditor::Wave w, double phase, uint32_t& noiseState) {
     }
 }
 
-// Pretty note name for inspector display. PICO-8 pitch 0 → C0.
+// Pretty note name for inspector display. The synth uses PICO-8 numbering
+// where pitch 33 = A4 = 440 Hz, so pitch 0 = C2 (~65.4 Hz). Pitch 63 ≈ D#7.
 const char* noteNames[] = {"C", "C#", "D", "D#", "E", "F",
                            "F#", "G", "G#", "A", "A#", "B"};
 std::string pitchLabel(int p) {
     if (p < 0 || p > 63) return "?";
-    int oct = p / 12;
+    int oct = p / 12 + 2;
     int n   = p % 12;
     char buf[8];
     std::snprintf(buf, sizeof(buf), "%s%d", noteNames[n], oct);
     return buf;
+}
+
+// Piano-keyboard helper: which pitches are black (sharp/flat) keys.
+bool isBlackKey(int p) {
+    int n = p % 12;
+    return n == 1 || n == 3 || n == 6 || n == 8 || n == 10;
 }
 
 const char* waveLabel(uint8_t w) {
@@ -590,7 +597,7 @@ bool SoundEditor::deserialize(const std::string& text) {
 
 void SoundEditor::draw() {
     if (!m_visible) return;
-    ImGui::SetNextWindowSize({900, 520}, ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize({1080, 720}, ImGuiCond_FirstUseEver);
     ImGui::Begin("Sound Editor", &m_visible);
 
     drawToolbar();
@@ -607,7 +614,8 @@ void SoundEditor::draw() {
     if (ImGui::BeginChild("##gridarea", {0, 0}, false)) {
         drawPalette();
         ImGui::Separator();
-        drawGrid();
+        drawPianoRoll();
+        drawVelocityStrip();
         ImGui::Separator();
         drawStepInspector();
     }
@@ -816,78 +824,128 @@ void SoundEditor::drawPalette() {
     }
 }
 
-// ─── Step grid ─────────────────────────────────────────────────────────────
+// ─── Piano roll (FL-Studio-style) ──────────────────────────────────────────
+//
+// Layout:
+//   [keyboard sidebar | roll grid (32 steps × 64 pitches)]
+//
+// The keyboard on the left shows alternating white/black key rows with C
+// labels every octave (C2..C7+). Each non-silent step in the SFX is a
+// colored rectangle in the roll (color = waveColor(step.wave)). Click
+// anywhere in the roll to select that step *and* set its pitch from the
+// row under the cursor — same one-handed sketching as the old step grid,
+// just rotated. Right-click silences a step. Drag-drop targets per column
+// accept SFX_WAVE / SFX_EFFECT / SFX_PRESET payloads from the palette.
+//
+// Pitch range: 0..63 (PICO-8 numbering). Row 0 is the highest pitch
+// visually (top of the grid), so we flip the index when drawing.
 
-void SoundEditor::drawGrid() {
+void SoundEditor::drawPianoRoll() {
     Sfx& s = m_sfx[m_selectedSfx];
 
-    const ImVec2 avail   = ImGui::GetContentRegionAvail();
-    const float  colW    = std::max(14.f, std::min(28.f, (avail.x - 12.f) / kSteps));
-    const float  pitchH  = 200.f;
-    const float  rowH    = 16.f;
-    const float  totalH  = pitchH + rowH * 3 + 4.f;
+    constexpr int   kPitches  = 64;
+    constexpr float kRowH     = 7.f;
+    constexpr float kKeysW    = 38.f;
+    const float     gridH     = kPitches * kRowH;
+
+    const ImVec2 avail = ImGui::GetContentRegionAvail();
+    const float  rollW = std::max(200.f, avail.x - kKeysW);
+    const float  colW  = rollW / kSteps;
 
     ImVec2 origin = ImGui::GetCursorScreenPos();
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    // Background
-    dl->AddRectFilled(origin,
-                      {origin.x + colW * kSteps, origin.y + totalH},
-                      IM_COL32(20, 20, 28, 255));
+    const ImVec2 keysOrigin = origin;
+    const ImVec2 rollOrigin = {origin.x + kKeysW, origin.y};
 
-    // ── Pitch bars + waveform / volume / effect rows ─────────────────────
+    // ── Keyboard sidebar ────────────────────────────────────────────────
+    for (int p = 0; p < kPitches; ++p) {
+        // Row 0 of the visual grid is the *highest* pitch (63).
+        const int   pitch = (kPitches - 1) - p;
+        const float y0    = keysOrigin.y + p * kRowH;
+        const float y1    = y0 + kRowH;
+        const bool  black = isBlackKey(pitch);
+        ImU32 keyCol = black ? IM_COL32(40, 40, 50, 255)
+                             : IM_COL32(220, 220, 225, 255);
+        dl->AddRectFilled({keysOrigin.x, y0},
+                          {keysOrigin.x + kKeysW, y1}, keyCol);
+        // Hairline separator between keys.
+        dl->AddLine({keysOrigin.x, y1},
+                    {keysOrigin.x + kKeysW, y1},
+                    IM_COL32(60, 60, 70, 255), 1.f);
+        // Octave label sits on every C row.
+        if (pitch % 12 == 0) {
+            char lbl[8];
+            std::snprintf(lbl, sizeof(lbl), "C%d", pitch / 12 + 2);
+            dl->AddText({keysOrigin.x + 4, y0 - 2},
+                        IM_COL32(20, 20, 30, 255), lbl);
+        }
+    }
+
+    // ── Roll background + grid lines ────────────────────────────────────
+    dl->AddRectFilled(rollOrigin,
+                      {rollOrigin.x + rollW, rollOrigin.y + gridH},
+                      IM_COL32(18, 18, 24, 255));
+
+    // Subtle row striping aligned with black keys, so the roll mirrors
+    // the keyboard sidebar visually.
+    for (int p = 0; p < kPitches; ++p) {
+        const int   pitch = (kPitches - 1) - p;
+        if (!isBlackKey(pitch)) continue;
+        const float y0 = rollOrigin.y + p * kRowH;
+        dl->AddRectFilled({rollOrigin.x, y0},
+                          {rollOrigin.x + rollW, y0 + kRowH},
+                          IM_COL32(28, 28, 36, 255));
+    }
+
+    // Vertical grid lines: thicker every 4 steps (beat lines), thinner
+    // between. The 16-step (half-pattern) line is brighter.
+    for (int i = 0; i <= kSteps; ++i) {
+        const float x = rollOrigin.x + i * colW;
+        ImU32 col = (i % 4 == 0) ? IM_COL32(70, 70, 85, 255)
+                                 : IM_COL32(40, 40, 50, 255);
+        if (i == kSteps / 2) col = IM_COL32(100, 100, 120, 255);
+        dl->AddLine({x, rollOrigin.y}, {x, rollOrigin.y + gridH}, col,
+                    (i % 4 == 0) ? 1.5f : 1.f);
+    }
+
+    // Loop range shading on top of the grid (between loop_start..loop_end).
+    if (s.loop_end > s.loop_start) {
+        const float lx0 = rollOrigin.x + s.loop_start * colW;
+        const float lx1 = rollOrigin.x + s.loop_end   * colW;
+        dl->AddRectFilled({lx0, rollOrigin.y},
+                          {lx1, rollOrigin.y + gridH},
+                          IM_COL32(220, 200, 80, 25));
+    }
+
+    // ── Playhead ────────────────────────────────────────────────────────
     int playingStep = -1;
     {
         std::lock_guard<std::mutex> lock(m_playMutex);
         if (m_playing && m_playSfxId == m_selectedSfx)
             playingStep = m_playStepIdx;
     }
+    if (playingStep >= 0 && playingStep < kSteps) {
+        const float x = rollOrigin.x + playingStep * colW;
+        dl->AddRectFilled({x, rollOrigin.y},
+                          {x + colW, rollOrigin.y + gridH},
+                          IM_COL32(80, 200, 100, 50));
+    }
 
+    // ── Notes (one rectangle per non-silent step) ───────────────────────
     for (int i = 0; i < kSteps; ++i) {
         const Step& st = s.steps[i];
-        float x0 = origin.x + i * colW;
-        float x1 = x0 + colW - 1.f;
+        if (st.volume == 0) continue;
+        const int   visualRow = (kPitches - 1) - st.pitch;
+        const float x0 = rollOrigin.x + i * colW + 1.f;
+        const float x1 = rollOrigin.x + (i + 1) * colW - 1.f;
+        const float y0 = rollOrigin.y + visualRow * kRowH + 0.5f;
+        const float y1 = y0 + kRowH - 1.f;
+        const ImU32 col = waveColor(st.wave);
+        dl->AddRectFilled({x0, y0}, {x1, y1}, col);
+        dl->AddRect({x0, y0}, {x1, y1}, IM_COL32(0, 0, 0, 120), 0.f, 0, 1.f);
 
-        // Selection / playhead highlights
-        if (i == m_selectedStep)
-            dl->AddRectFilled({x0, origin.y}, {x1, origin.y + totalH},
-                              IM_COL32(60, 80, 130, 80));
-        if (i == playingStep)
-            dl->AddRectFilled({x0, origin.y}, {x1, origin.y + totalH},
-                              IM_COL32(80, 200, 100, 60));
-
-        // Loop range shading (uses end as exclusive: [start, end))
-        if (s.loop_end > s.loop_start && i >= s.loop_start && i < s.loop_end)
-            dl->AddRectFilled({x0, origin.y + pitchH - 2.f},
-                              {x1, origin.y + pitchH      },
-                              IM_COL32(200, 180, 60, 140));
-
-        // Pitch bar (silent steps render as a faint dash so the user sees them).
-        float pitchY = origin.y + (1.f - st.pitch / 63.f) * (pitchH - 4.f) + 2.f;
-        if (st.volume > 0) {
-            ImU32 col = waveColor(st.wave);
-            dl->AddRectFilled({x0 + 2, pitchY},
-                              {x1 - 2, origin.y + pitchH - 2}, col);
-        } else {
-            dl->AddLine({x0 + 4, origin.y + pitchH - 6},
-                        {x1 - 4, origin.y + pitchH - 6},
-                        IM_COL32(80, 80, 90, 255), 1.f);
-        }
-
-        // Row 1 — waveform color square
-        float r1y = origin.y + pitchH + 1.f;
-        dl->AddRectFilled({x0 + 2, r1y}, {x1 - 2, r1y + rowH - 2.f},
-                          waveColor(st.wave));
-
-        // Row 2 — volume bar (height-coded 0..7)
-        float r2y = r1y + rowH;
-        float vh  = (st.volume / 7.f) * (rowH - 4.f);
-        dl->AddRectFilled({x0 + 2, r2y + (rowH - 2.f) - vh},
-                          {x1 - 2, r2y + (rowH - 2.f)},
-                          IM_COL32(220, 220, 220, 255));
-
-        // Row 3 — effect glyph (single letter)
-        float r3y = r2y + rowH;
+        // Effect glyph overlaid on the note (small).
         const char* glyph = "";
         switch (st.effect) {
             case EffectSlide:   glyph = "S"; break;
@@ -897,40 +955,57 @@ void SoundEditor::drawGrid() {
             case EffectFadeOut: glyph = ">"; break;
             default: break;
         }
-        if (*glyph)
-            dl->AddText({x0 + colW * 0.5f - 4, r3y + 1},
-                        IM_COL32(220, 200, 100, 255), glyph);
+        if (*glyph) {
+            dl->AddText({x0 + 2, y0 - 1},
+                        IM_COL32(255, 255, 255, 220), glyph);
+        }
+
+        // Selection outline.
+        if (i == m_selectedStep) {
+            dl->AddRect({x0 - 1, y0 - 1}, {x1 + 1, y1 + 1},
+                        IM_COL32(255, 220, 60, 255), 0.f, 0, 2.f);
+        }
     }
 
-    // Per-column hit areas — one InvisibleButton each so each can be its own
-    // drag-drop target. Within a column we still support click + drag-in-the-
-    // pitch-area sketching, which now reads the column index directly from
-    // the loop instead of computing it from mouse-x.
+    // ── Hit areas ───────────────────────────────────────────────────────
+    // One InvisibleButton per column so each can carry its own drag-drop
+    // target. Within a column, click+drag sketches pitch by reading
+    // mouse Y; right-click silences the step.
     for (int i = 0; i < kSteps; ++i) {
-        float x0 = origin.x + i * colW;
-        ImGui::SetCursorScreenPos({x0, origin.y});
+        const float x0 = rollOrigin.x + i * colW;
+        ImGui::SetCursorScreenPos({x0, rollOrigin.y});
         char id[16];
         std::snprintf(id, sizeof(id), "##col%d", i);
-        ImGui::InvisibleButton(id, {colW, totalH});
+        ImGui::InvisibleButton(id, {colW, gridH},
+                               ImGuiButtonFlags_MouseButtonLeft |
+                               ImGuiButtonFlags_MouseButtonRight);
 
-        // Sketching: click anywhere in the column selects it; click in the
-        // pitch area also sets pitch by vertical mouse position.
+        // Left-click / drag: select + set pitch from cursor row.
         if (ImGui::IsItemActive() && ImGui::IsMouseDown(0)) {
             m_selectedStep = i;
             ImVec2 mp = ImGui::GetIO().MousePos;
-            if (mp.y >= origin.y && mp.y <= origin.y + pitchH) {
-                float t = 1.f - (mp.y - origin.y) / pitchH;
-                int p = (int)std::round(std::clamp(t, 0.f, 1.f) * 63.f);
-                Step& st = s.steps[i];
-                if (st.pitch != (uint8_t)p) {
-                    st.pitch = (uint8_t)p;
-                    if (st.volume == 0) st.volume = 5;   // make it audible
-                    markDirty();
-                }
+            float t = (mp.y - rollOrigin.y) / kRowH;
+            int   visualRow = (int)std::clamp(t, 0.f, (float)(kPitches - 1));
+            int   pitch = (kPitches - 1) - visualRow;
+            Step& st = s.steps[i];
+            if (st.pitch != (uint8_t)pitch) {
+                st.pitch = (uint8_t)pitch;
+                if (st.volume == 0) st.volume = 5;
+                markDirty();
+            } else if (st.volume == 0) {
+                st.volume = 5;
+                markDirty();
             }
         }
 
-        // Drop targets — palette cards push payloads here.
+        // Right-click: silence the step.
+        if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(1)) {
+            Step& st = s.steps[i];
+            if (st.volume != 0) { st.volume = 0; markDirty(); }
+            m_selectedStep = i;
+        }
+
+        // Drag-drop drop target — palette cards land here.
         if (ImGui::BeginDragDropTarget()) {
             if (auto* pl = ImGui::AcceptDragDropPayload("SFX_WAVE")) {
                 uint8_t w = *(const uint8_t*)pl->Data;
@@ -956,14 +1031,98 @@ void SoundEditor::drawGrid() {
             ImGui::EndDragDropTarget();
         }
     }
+
+    // Reserve the layout space we drew into so subsequent widgets stack
+    // below the roll instead of on top of it.
+    ImGui::SetCursorScreenPos({origin.x, origin.y + gridH + 4.f});
+    ImGui::Dummy({kKeysW + rollW, 0.f});
+}
+
+// ─── Velocity strip (per-step volume bars) ─────────────────────────────────
+
+void SoundEditor::drawVelocityStrip() {
+    Sfx& s = m_sfx[m_selectedSfx];
+
+    constexpr int   kPitches = 64;
+    constexpr float kRowH    = 7.f;
+    constexpr float kKeysW   = 38.f;
+    constexpr float kStripH  = 70.f;
+    (void)kPitches; (void)kRowH;   // (kept for layout symmetry)
+
+    const ImVec2 avail = ImGui::GetContentRegionAvail();
+    const float  rollW = std::max(200.f, avail.x - kKeysW);
+    const float  colW  = rollW / kSteps;
+
+    ImVec2 origin = ImGui::GetCursorScreenPos();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    // Sidebar label that lines up with the keyboard column above.
+    dl->AddRectFilled({origin.x, origin.y},
+                      {origin.x + kKeysW, origin.y + kStripH},
+                      IM_COL32(28, 28, 36, 255));
+    dl->AddText({origin.x + 4, origin.y + kStripH * 0.5f - 7},
+                IM_COL32(180, 180, 190, 255), "VEL");
+
+    const ImVec2 stripOrigin = {origin.x + kKeysW, origin.y};
+    dl->AddRectFilled(stripOrigin,
+                      {stripOrigin.x + rollW, stripOrigin.y + kStripH},
+                      IM_COL32(18, 18, 24, 255));
+
+    // Vertical step dividers, matching the roll above (every-4 thicker).
+    for (int i = 0; i <= kSteps; ++i) {
+        float x = stripOrigin.x + i * colW;
+        ImU32 col = (i % 4 == 0) ? IM_COL32(70, 70, 85, 255)
+                                 : IM_COL32(40, 40, 50, 255);
+        dl->AddLine({x, stripOrigin.y},
+                    {x, stripOrigin.y + kStripH}, col,
+                    (i % 4 == 0) ? 1.5f : 1.f);
+    }
+
+    // Bars: height = volume / 7 of the strip.
+    for (int i = 0; i < kSteps; ++i) {
+        const Step& st = s.steps[i];
+        if (st.volume == 0) continue;
+        const float h  = (st.volume / 7.f) * (kStripH - 6.f);
+        const float x0 = stripOrigin.x + i * colW + 2.f;
+        const float x1 = stripOrigin.x + (i + 1) * colW - 2.f;
+        const float y1 = stripOrigin.y + kStripH - 2.f;
+        const float y0 = y1 - h;
+        ImU32 col = waveColor(st.wave);
+        dl->AddRectFilled({x0, y0}, {x1, y1}, col);
+        if (i == m_selectedStep)
+            dl->AddRect({x0 - 1, y0 - 1}, {x1 + 1, y1 + 1},
+                        IM_COL32(255, 220, 60, 255), 0.f, 0, 2.f);
+    }
+
+    // Per-column hit areas: drag vertically to set this step's volume.
+    for (int i = 0; i < kSteps; ++i) {
+        const float x0 = stripOrigin.x + i * colW;
+        ImGui::SetCursorScreenPos({x0, stripOrigin.y});
+        char id[16];
+        std::snprintf(id, sizeof(id), "##vel%d", i);
+        ImGui::InvisibleButton(id, {colW, kStripH});
+
+        if (ImGui::IsItemActive() && ImGui::IsMouseDown(0)) {
+            m_selectedStep = i;
+            ImVec2 mp = ImGui::GetIO().MousePos;
+            float t  = 1.f - (mp.y - stripOrigin.y) / kStripH;
+            int   v  = (int)std::round(std::clamp(t, 0.f, 1.f) * 7.f);
+            Step& st = s.steps[i];
+            if ((int)st.volume != v) { st.volume = (uint8_t)v; markDirty(); }
+        }
+    }
+
+    ImGui::SetCursorScreenPos({origin.x, origin.y + kStripH + 4.f});
+    ImGui::Dummy({kKeysW + rollW, 0.f});
 }
 
 // ─── Step inspector ────────────────────────────────────────────────────────
 
 void SoundEditor::drawStepInspector() {
     if (m_selectedStep < 0) {
-        ImGui::TextDisabled("Click a step in the grid to edit. Drag inside the "
-                            "pitch area to sketch a melody.");
+        ImGui::TextDisabled(
+            "Click in the roll to place / move a note. Right-click to silence. "
+            "Drag bars in the velocity strip to set per-step volume.");
         return;
     }
     Sfx&  s  = m_sfx[m_selectedSfx];

@@ -65,11 +65,29 @@ void audio_shutdown(void) {
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * Chiptune lifecycle (called from main.c after rom_load)
+ *
+ * Mix_OpenAudio is allowed to renegotiate frequency *and* channel count
+ * under our requested values (the simple Mix_OpenAudio passes both
+ * SDL_AUDIO_ALLOW_FREQUENCY_CHANGE and SDL_AUDIO_ALLOW_CHANNELS_CHANGE).
+ * If we render chunks assuming 44100 stereo but the device opened at,
+ * say, 48000 mono, Mix_QuickLoad_RAW reads our buffer with the wrong
+ * frame layout — playback comes out fast and high-pitched. Always read
+ * the real format back via Mix_QuerySpec.
  * ───────────────────────────────────────────────────────────────────────────── */
 
 void audio_load_chiptune(const char* rom_base_path) {
     chiptune_free(&g_chiptune);
-    chiptune_load(&g_chiptune, rom_base_path, THERMO_SAMPLE_RATE);
+
+    int     freq     = THERMO_SAMPLE_RATE;
+    int     channels = 2;
+    Uint16  fmt      = 0;
+    int     opened   = Mix_QuerySpec(&freq, &fmt, &channels);
+    if (opened == 0) {
+        fprintf(stderr,
+                "WARN: chiptune: SDL_mixer not opened; SFX disabled.\n");
+        return;
+    }
+    chiptune_load(&g_chiptune, rom_base_path, freq, channels);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────

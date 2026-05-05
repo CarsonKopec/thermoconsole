@@ -248,7 +248,7 @@ static int parse_sounds_json(Chiptune* ct, const char* text, size_t len) {
  * format, so we render to interleaved stereo S16 (L = R = mono synth).
  */
 
-static int render_sfx(const ChiptuneSfx* sfx, int sample_rate,
+static int render_sfx(const ChiptuneSfx* sfx, int sample_rate, int channels,
                       int from_step, int to_step,
                       uint8_t** out_buf, uint32_t* out_bytes)
 {
@@ -263,11 +263,11 @@ static int render_sfx(const ChiptuneSfx* sfx, int sample_rate,
     const double step_sec = spd * tick_sec;
     const double samples_per_step = step_sec * sample_rate;
 
-    const int    total_steps   = to_step - from_step;
-    const size_t mono_samples  = (size_t)(samples_per_step * total_steps + 0.5);
-    if (mono_samples == 0) { *out_buf = NULL; *out_bytes = 0; return -1; }
+    const int    total_steps  = to_step - from_step;
+    const size_t frame_count  = (size_t)(samples_per_step * total_steps + 0.5);
+    if (frame_count == 0) { *out_buf = NULL; *out_bytes = 0; return -1; }
 
-    const size_t bytes = mono_samples * 2 /* stereo */ * sizeof(int16_t);
+    const size_t bytes = frame_count * channels * sizeof(int16_t);
     int16_t* out = (int16_t*)malloc(bytes);
     if (!out) return -1;
 
@@ -278,7 +278,7 @@ static int render_sfx(const ChiptuneSfx* sfx, int sample_rate,
      * between steps emit clicks that read as harshness when stacked. */
     const double edge_samples = 0.001 * sample_rate;
 
-    for (size_t i = 0; i < mono_samples; ++i) {
+    for (size_t i = 0; i < frame_count; ++i) {
         double whole_step = (double)i / samples_per_step;
         int    si         = (int)whole_step;
         if (si >= total_steps) si = total_steps - 1;
@@ -328,8 +328,9 @@ static int render_sfx(const ChiptuneSfx* sfx, int sample_rate,
         int v = (int)(sample * 0.30 * 32767.0);
         if (v < -32768) v = -32768;
         if (v >  32767) v =  32767;
-        out[i * 2 + 0] = (int16_t)v;
-        out[i * 2 + 1] = (int16_t)v;
+        for (int c = 0; c < channels; ++c) {
+            out[i * channels + c] = (int16_t)v;   /* L = R for mono synth */
+        }
 
         osc_phase += freq / sample_rate;
         if (osc_phase >= 1.0) osc_phase -= floor(osc_phase);
@@ -363,7 +364,8 @@ static void render_all_chunks(Chiptune* ct) {
 
         uint8_t* buf = NULL;
         uint32_t bytes = 0;
-        if (render_sfx(sfx, ct->sample_rate, from, to, &buf, &bytes) != 0)
+        if (render_sfx(sfx, ct->sample_rate, ct->channels,
+                       from, to, &buf, &bytes) != 0)
             continue;
 
         Mix_Chunk* chunk = Mix_QuickLoad_RAW(buf, bytes);
@@ -378,9 +380,11 @@ static void render_all_chunks(Chiptune* ct) {
 
 /* ─── Public API ───────────────────────────────────────────────────────── */
 
-int chiptune_load(Chiptune* ct, const char* rom_base_path, int sample_rate) {
+int chiptune_load(Chiptune* ct, const char* rom_base_path,
+                  int sample_rate, int channels) {
     memset(ct, 0, sizeof(*ct));
     ct->sample_rate = sample_rate > 0 ? sample_rate : 44100;
+    ct->channels    = (channels >= 1 && channels <= 8) ? channels : 2;
     /* Pre-fill defaults so unfilled slots are valid (silent, speed 4, etc.). */
     for (int i = 0; i < CHIPTUNE_SFX_COUNT; ++i) {
         ct->sfx[i].speed = 4;
@@ -417,8 +421,8 @@ int chiptune_load(Chiptune* ct, const char* rom_base_path, int sample_rate) {
 
     int rendered = 0;
     for (int i = 0; i < CHIPTUNE_SFX_COUNT; ++i) if (ct->sfx[i].chunk) rendered++;
-    printf("[OK] Chiptune loaded: %d / %d sfx rendered\n",
-           rendered, CHIPTUNE_SFX_COUNT);
+    printf("[OK] Chiptune loaded: %d / %d sfx rendered (%d Hz, %d ch)\n",
+           rendered, CHIPTUNE_SFX_COUNT, ct->sample_rate, ct->channels);
     ct->loaded = 1;
     return 0;
 }

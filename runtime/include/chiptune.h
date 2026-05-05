@@ -60,15 +60,21 @@ typedef struct {
 
 typedef struct {
     int          loaded;       /* 0 = no sounds.json, just defaults */
-    int          sample_rate;  /* Mix_OpenAudio's negotiated rate */
+    int          sample_rate;  /* SDL_mixer's actual negotiated rate */
+    int          channels;     /* SDL_mixer's actual negotiated channels (1 or 2) */
     ChiptuneSfx  sfx[CHIPTUNE_SFX_COUNT];
 } Chiptune;
 
 /* Load + parse <rom_base_path>/sounds.json and pre-render every slot.
+ * Pass the SDL_mixer device's *actual* sample_rate and channels (from
+ * Mix_QuerySpec — Mix_OpenAudio is allowed to renegotiate, so don't
+ * assume what you asked for is what you got).
+ *
  * Safe to call with a missing file — leaves the chiptune in an
  * unloaded state (loaded == 0) and returns 0. Returns non-zero only on
  * a hard error like a malformed file we can't recover from. */
-int  chiptune_load(Chiptune* ct, const char* rom_base_path, int sample_rate);
+int  chiptune_load(Chiptune* ct, const char* rom_base_path,
+                   int sample_rate, int channels);
 
 /* Free every Mix_Chunk + backing buffer. Safe to call repeatedly. */
 void chiptune_free(Chiptune* ct);
